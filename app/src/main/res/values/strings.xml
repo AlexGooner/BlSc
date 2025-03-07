@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">BlSc</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="favourite">Избранное</string>
+    <string name="clear">Очистить</string>
+    <string name="load">Загрузить</string>
+    <string name="plus">+</string>
+    <string name="device_name">Имя устройства</string>
+    <string name="mac">MAC-адрес</string>
+    <string name="add_device">Добавить устройство</string>
+    <string name="history">История поиска</string>
+    <string name="to_main">К поиску</string>
+    <string name="to_favs">К избранным</string>
+    <string name="to_history">К истории поиска</string>
+    <string name="save">Save</string>
+    <string name="title_activity_maps">MapsActivity</string>
+</resources>
