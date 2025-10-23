@@ -35,9 +35,9 @@
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
-        android:layout_width="405dp"
+        android:layout_width="match_parent"
         android:layout_height="510dp"
-        android:layout_margin="10dp"
+        android:layout_margin="20dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -86,22 +86,37 @@
             android:id="@+id/fav_imageView"
             android:layout_width="86dp"
             android:layout_height="61dp"
-            android:layout_marginStart="45dp"
-            android:layout_marginEnd="30dp"
+            android:layout_marginStart="40dp"
             android:contentDescription="@string/favourite"
             app:srcCompat="@drawable/star" />
 
+        <ImageView
+            android:id="@+id/settings_imageView"
+            android:layout_width="86dp"
+            android:layout_height="61dp"
+            android:layout_marginEnd="15dp"
+            android:contentDescription="Настройки"
+            app:srcCompat="@drawable/ic_settings" />
+
+        <ImageView
+            android:id="@+id/history_imageView"
+            android:layout_width="86dp"
+            android:layout_height="61dp"
+            android:contentDescription="История"
+            app:srcCompat="@drawable/ic_history" />
+
         <TextView
             android:id="@+id/timer_text_view"
-            android:layout_width="102dp"
+            android:layout_width="wrap_content"
             android:layout_height="63dp"
             android:layout_marginStart="10dp"
             android:padding="5dp"
-            android:textSize="20sp" />
+            android:textSize="20sp"
+            android:visibility="gone"/>
 
         <com.airbnb.lottie.LottieAnimationView
             android:id="@+id/lottie_animation"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:visibility="visible"
             app:lottie_autoPlay="true"
@@ -111,6 +126,7 @@
     </LinearLayout>
 
     <TextView
+
         android:id="@+id/mapsTextView"
         android:layout_width="311dp"
         android:layout_height="144dp"

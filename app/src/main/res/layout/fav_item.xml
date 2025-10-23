@@ -3,34 +3,127 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/item_border"
-    android:layout_marginTop="10dp">
+    android:layout_height="120dp"
+    android:layout_marginStart="30dp"
+    android:layout_marginTop="10dp"
+    android:layout_marginEnd="30dp"
+    android:background="@drawable/item_border">
+
+
+    <TextView
+        android:id="@+id/fav_name_title_text_view"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.063"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp"
+        android:text="@string/name"
+        android:textColor="@color/grey"/>
 
     <TextView
         android:id="@+id/fav_name_text_view"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="16dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="Name"
-        android:padding="5dp"/>
-
-    <TextView
-        android:id="@+id/fav_mac_address_text_view"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:layout_marginEnd="16dp"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/fav_name_text_view"
-        tools:text="MAC Address"
-        android:padding="5dp"/>
+        app:layout_constraintTop_toBottomOf="@+id/fav_name_title_text_view"
+        tools:text="Name" />
+
+    <TextView
+        android:id="@+id/fav_mac_title_text_view"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="@string/mac"
+        android:textColor="@color/grey"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.063"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/fav_name_text_view" />
+
+    <TextView
+        android:id="@+id/fav_mac_address_text_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/fav_mac_title_text_view"
+        tools:text="MAC Address" />
+
+    <TextView
+        android:id="@+id/fav_area_title_text_view"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.925"
+        android:text="@string/area"
+        android:textColor="@color/grey"
+        app:layout_constraintStart_toEndOf="@+id/fav_name_title_text_view"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/textView_fav_area"
+        android:layout_width="64dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="36dp"
+        android:text="@string/area"
+        android:textAlignment="gravity"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.839"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/fav_vibration_title_text_view"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/vibration_duration"
+        android:textColor="@color/grey"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.063"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/fav_mac_address_text_view" />
+
+    <TextView
+        android:id="@+id/fav_vibration_text_view"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/fav_vibration_title_text_view"
+        tools:text="Средняя" />
+
+    <Button
+        android:id="@+id/buttonFavInfo"
+        android:layout_width="39dp"
+        android:layout_height="24dp"
+        android:layout_marginTop="32dp"
+        android:paddingLeft="1dp"
+        android:paddingTop="1dp"
+        android:paddingRight="1dp"
+        android:paddingBottom="1dp"
+        android:text="@string/info"
+        android:textSize="11sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.772"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/textView_fav_area" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

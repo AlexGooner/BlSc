@@ -28,9 +28,15 @@ class FavViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addFavItem(favItem: FavItem) {
         val currentItems = favItems.value?.toMutableList() ?: mutableListOf()
-        currentItems.add(favItem)
-        favItems.value = currentItems
-        repository.saveFavItems(currentItems)
+        
+        // Проверяем, не существует ли уже элемент с таким MAC-адресом
+        val existingItem = currentItems.find { it.macAddress == favItem.macAddress }
+        if (existingItem == null) {
+            currentItems.add(favItem)
+            favItems.value = currentItems
+            repository.saveFavItems(currentItems)
+        }
+        // Если дубликат найден, ничего не добавляем
     }
 
     fun clearFavItems() {
@@ -43,6 +49,11 @@ class FavViewModel(application: Application) : AndroidViewModel(application) {
         currentItems.remove(favItem)
         favItems.value = currentItems
         repository.saveFavItems(currentItems)
+    }
+
+    fun saveFavItems(items: List<FavItem>) {
+        favItems.value = items
+        repository.saveFavItems(items)
     }
 
     fun getMacs(adapter: FavAdapter, textView: TextView){

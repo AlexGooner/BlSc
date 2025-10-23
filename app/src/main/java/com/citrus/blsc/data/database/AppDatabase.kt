@@ -4,10 +4,12 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import android.content.Context
+import com.citrus.blsc.data.model.SearchHistoryItem
 
-@Database(entities = [DeviceCoordinate::class], version = 2)
+@Database(entities = [DeviceCoordinate::class, SearchHistoryItem::class], version = 3)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun deviceCoordinateDao(): DeviceCoordinateDao
+    abstract fun searchHistoryDao(): SearchHistoryDao
 
     companion object {
         @Volatile

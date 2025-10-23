@@ -1,5 +1,6 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
     <style name="Base.Theme.BlSc" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Light theme colors -->
         <item name="colorPrimary">@color/primary_light</item>
@@ -32,15 +33,6 @@
         <item name="android:statusBarColor">@color/background_light</item>
         <item name="android:navigationBarColor">@color/background_light</item>
         <item name="android:windowLightStatusBar">true</item>
-
-    </style>
-
-    <style name="Theme.BlSc" parent="Base.Theme.BlSc" />
-    
-    <!-- Animation themes -->
-    <style name="Theme.BlSc.Transparent" parent="Theme.BlSc">
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowAnimationStyle">@style/ActivityAnimation</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

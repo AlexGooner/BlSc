@@ -1,10 +1,14 @@
 package com.citrus.blsc.ui.fav
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.map
@@ -13,6 +17,8 @@ import com.citrus.blsc.data.model.FavItem
 import com.citrus.blsc.OnFavItemActionListener
 import com.citrus.blsc.R
 import com.citrus.blsc.ui.map.MapsActivity
+import com.citrus.blsc.utils.UIAnimationHelper
+import com.citrus.blsc.utils.VibrationHelper
 
 class FavAdapter(
     var favItems: MutableList<FavItem>,
@@ -20,8 +26,11 @@ class FavAdapter(
     private val context: Context
 ) : RecyclerView.Adapter<FavAdapter.ViewHolder>() {
 
-
-
+    companion object {
+        private const val ACTION_DELETE = 0
+        private const val ACTION_MAP = 1
+        private const val ACTION_EDIT = 2
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
@@ -29,27 +38,97 @@ class FavAdapter(
         return ViewHolder(view)
     }
 
+    @SuppressLint("SetTextI18n")
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        // Анимация появления элемента
+        UIAnimationHelper.animateCardAppear(holder.itemView, (position * 100).toLong())
 
         val favItem = favItems[position]
         holder.nameTextView.text = favItem.name
         holder.macAddressTextView.text = favItem.macAddress
 
-        holder.itemView.setOnLongClickListener {
+        if (favItem.area == null) {
+            holder.areaTextView.text = "Unknown"
+        } else {
+            holder.areaTextView.text = favItem.area
+        }
+
+        // Отображаем длину вибрации
+        holder.vibrationTextView.text = VibrationHelper.getVibrationDisplayName(context, favItem.vibrateLong)
+
+        holder.buttonInfo.setOnClickListener {
+            UIAnimationHelper.animateButtonPress(holder.buttonInfo)
             val dialog = AlertDialog.Builder(holder.itemView.context)
             dialog.setTitle("Выберите действие")
-            dialog.setItems(arrayOf("Удалить", "Посмотреть на карте")) { _, which ->
+            dialog.setItems(arrayOf("Удалить", "Посмотреть на карте", "Изменить")) { _, which ->
                 when (which) {
-                    0 -> {
+                    ACTION_DELETE -> {
                         listener.removeFavItem(favItem)
                         notifyItemRemoved(position)
                     }
-                    1 -> {
+                    ACTION_MAP -> {
                         val intent = Intent(context, MapsActivity::class.java)
                         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         val macAddress = holder.macAddressTextView.text.toString()
                         intent.putExtra("mac", macAddress)
                         context.startActivity(intent)
+                    }
+                    ACTION_EDIT -> {
+                        val dialog = AlertDialog.Builder(holder.itemView.context)
+                        val view = LayoutInflater.from(holder.itemView.context).inflate(R.layout.add_device_dialog, null)
+                        dialog.setView(view)
+
+                        val nameEditText = view.findViewById<android.widget.EditText>(R.id.device_name_edit_text)
+                        val macEditText = view.findViewById<android.widget.EditText>(R.id.mac_address_edit_text)
+                        val areaEditText = view.findViewById<android.widget.EditText>(R.id.area_edit_text)
+                        val vibrationSpinner = view.findViewById<Spinner>(R.id.vibration_duration_spinner)
+
+                        // Настройка Spinner для выбора длины вибрации
+                        val vibrationOptions = arrayOf(
+                            context.getString(R.string.vibration_short),
+                            context.getString(R.string.vibration_medium),
+                            context.getString(R.string.vibration_long),
+                            context.getString(R.string.vibration_custom)
+                        )
+                        val vibrationValues = arrayOf(
+                            VibrationHelper.VIBRATION_SHORT,
+                            VibrationHelper.VIBRATION_MEDIUM,
+                            VibrationHelper.VIBRATION_LONG,
+                            VibrationHelper.VIBRATION_CUSTOM
+                        )
+                        
+                        val adapter = ArrayAdapter(holder.itemView.context, android.R.layout.simple_spinner_item, vibrationOptions)
+                        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                        vibrationSpinner.adapter = adapter
+
+                        // Pre-fill with current values
+                        nameEditText.setText(favItem.name)
+                        macEditText.setText(favItem.macAddress)
+                        areaEditText.setText(favItem.area ?: "")
+                        
+                        // Устанавливаем текущее значение вибрации
+                        val currentVibrationIndex = vibrationValues.indexOf(favItem.vibrateLong)
+                        vibrationSpinner.setSelection(if (currentVibrationIndex >= 0) currentVibrationIndex else 1) // По умолчанию средняя
+
+                        dialog.setPositiveButton("Сохранить") { _, _ ->
+                            val updatedName = nameEditText.text.toString()
+                            val updatedMac = macEditText.text.toString()
+                            val updatedArea = areaEditText.text.toString()
+                            val selectedVibrationIndex = vibrationSpinner.selectedItemPosition
+                            val updatedVibration = vibrationValues[selectedVibrationIndex]
+
+                            val updatedItem = FavItem(updatedName, updatedMac, favItem.rssi, updatedArea, updatedVibration)
+
+                            // Update list and notify adapter
+                            favItems[position] = updatedItem
+                            notifyItemChanged(position)
+
+                            // Persist changes via listener
+                            listener.saveFavItemToPrefs()
+                        }
+
+                        dialog.setNegativeButton("Отмена") { _, _ -> }
+                        dialog.show()
                     }
                 }
             }
@@ -66,8 +145,41 @@ class FavAdapter(
         return favItems.map { it.macAddress }
     }
 
+    /**
+     * Удаляет дубликаты из списка favItems на основе MAC-адреса.
+     * Оставляет только первое вхождение каждого уникального MAC-адреса.
+     */
+    fun removeDuplicates() {
+        val uniqueItems = mutableListOf<FavItem>()
+        val seenMacAddresses = mutableSetOf<String>()
+        
+        for (item in favItems) {
+            if (!seenMacAddresses.contains(item.macAddress)) {
+                seenMacAddresses.add(item.macAddress)
+                uniqueItems.add(item)
+            }
+        }
+        
+        val removedCount = favItems.size - uniqueItems.size
+        if (removedCount > 0) {
+            favItems.clear()
+            favItems.addAll(uniqueItems)
+            notifyDataSetChanged()
+        }
+    }
+
+    /**
+     * Проверяет, существует ли элемент с указанным MAC-адресом
+     */
+    fun hasMacAddress(macAddress: String): Boolean {
+        return favItems.any { it.macAddress == macAddress }
+    }
+
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val nameTextView: TextView = itemView.findViewById(R.id.fav_name_text_view)
         val macAddressTextView: TextView = itemView.findViewById(R.id.fav_mac_address_text_view)
+        val areaTextView: TextView = itemView.findViewById(R.id.textView_fav_area)
+        val vibrationTextView: TextView = itemView.findViewById(R.id.fav_vibration_text_view)
+        val buttonInfo: Button = itemView.findViewById(R.id.buttonFavInfo)
     }
 }

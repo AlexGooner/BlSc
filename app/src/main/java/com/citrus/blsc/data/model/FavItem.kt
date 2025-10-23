@@ -5,8 +5,10 @@ import android.os.Parcelable
 import androidx.room.Entity
 
 @Entity(tableName = "fav_items")
-data class FavItem(var name: String, val macAddress: String, val rssi: String) : Parcelable {
+data class FavItem(var name: String, val macAddress: String, val rssi: String, val area: String, val vibrateLong: String) : Parcelable {
     constructor(parcel: Parcel) : this(
+        parcel.readString()!!,
+        parcel.readString()!!,
         parcel.readString()!!,
         parcel.readString()!!,
         parcel.readString()!!
@@ -16,6 +18,8 @@ data class FavItem(var name: String, val macAddress: String, val rssi: String) :
         parcel.writeString(name)
         parcel.writeString(macAddress)
         parcel.writeString(rssi)
+        parcel.writeString(area)
+        parcel.writeString(vibrateLong)
     }
 
     override fun describeContents(): Int = 0
