@@ -300,4 +300,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
-// AIzaSyD8b_63WbyJvlw1J8ILa-96LwfEC9A6JJw - api для этого спо
+// AIzaSyD8b_63WbyJvlw1J8ILa-96LwfEC9A6JJw - api
