@@ -1,5 +1,6 @@
 package com.citrus.blsc.ui.main
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
@@ -12,19 +13,17 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.CountDownTimer
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import android.util.Log
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import com.citrus.blsc.R
 import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import com.citrus.blsc.data.model.SearchHistoryItem
 import com.citrus.blsc.data.database.AppDatabase
@@ -37,11 +36,10 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 
-
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
-        const val PROXIMITY_THRESHOLD = 5
+        const val PROXIMITY_THRESHOLD = 10
     }
 
     private val _devices = MutableLiveData<List<BluetoothDeviceInfo>>()
@@ -58,19 +56,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val lastDevice: LiveData<BluetoothDeviceInfo?> get() = _lastDevice
     private var scanning = false
     var favouriteMacs: List<String> = emptyList()
-    var favouriteVibrations: Map<String, String> = emptyMap() // MAC -> vibration type
+    var favouriteVibrations: Map<String, String> = emptyMap()
     private val counterList = mutableMapOf<String, Int>()
     private val database = AppDatabase.getDatabase(application)
+    private var currentLatitude: Double? = null
+    private var currentLongitude: Double? = null
+    private val currentCycleDevices = mutableSetOf<String>()
 
-
-    @SuppressLint("MissingPermission")
-    fun startScanning(context: Context, text: String, textTwo: String, textView: TextView, textViewTwo: TextView) {
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+    fun startScanning(
+        context: Context,
+        text: String,
+        textTwo: String,
+        textView: TextView,
+        textViewTwo: TextView
+    ) {
         scanning = true
-        discoveredDevices.clear()
-        _devices.value = emptyList()
+
+        currentCycleDevices.clear()
+
+        _devices.value = discoveredDevices.toList()
+
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (e: IllegalArgumentException) {
+        }
         context.registerReceiver(receiver, filter)
         bluetoothAdapter?.startDiscovery()
+
         textFileHelper = TextFileHelper(context)
         textFileHelper.writeToFile(text)
         clear(textView)
@@ -85,11 +99,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             try {
                 context.unregisterReceiver(receiver)
-            } catch (e: IllegalArgumentException){}
+            } catch (e: IllegalArgumentException) {
+            }
 
             Toast.makeText(context, "Scanning is over", Toast.LENGTH_SHORT).show()
         }
 
+    }
+
+    fun setCurrentCoordinates(latitude: Double?, longitude: Double?) {
+        currentLatitude = latitude
+        currentLongitude = longitude
+        Log.d("MainViewModel", "Coordinates set: $latitude, $longitude")
+    }
+
+    fun clearAllData() {
+        discoveredDevices.clear()
+        currentCycleDevices.clear()
+        _devices.value = emptyList()
+        counterList.clear()
+        vibratedDevices.clear()
+        _lastDevice.value = null
+        Log.d("MainViewModel", "All data cleared")
     }
 
     fun startTimer(textView: TextView) {
@@ -159,10 +190,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Сохраняет найденное устройство в историю поиска
-     */
-     fun saveToSearchHistory(deviceInfo: BluetoothDeviceInfo, context: Context) {
+    fun saveToSearchHistory(deviceInfo: BluetoothDeviceInfo, context: Context) {
         viewModelScope.launch {
             try {
                 val device = deviceInfo.device
@@ -171,16 +199,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val rssi = deviceInfo.rssi.toString()
                 val timestamp = System.currentTimeMillis()
 
-                // Получаем координаты, если доступны
-                var latitude: Double? = null
-                var longitude: Double? = null
+                var latitude = currentLatitude
+                var longitude = currentLongitude
 
                 if (ActivityCompat.checkSelfPermission(
                         context,
-                        android.Manifest.permission.ACCESS_FINE_LOCATION
+                        Manifest.permission.ACCESS_FINE_LOCATION
                     ) == PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(
                         context,
-                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                        Manifest.permission.ACCESS_COARSE_LOCATION
                     ) == PackageManager.PERMISSION_GRANTED
                 ) {
                     val fusedLocationClient =
@@ -203,16 +230,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isFavourite = favouriteMacs.contains(macAddress)
                 )
 
-                // Сохраняем в базу данных асинхронно
-                    try {
-                        database.searchHistoryDao().insertHistoryItem(historyItem)
-                        Log.d(
-                            "SearchHistory",
-                            "Successfully saved device to history: $deviceName ($macAddress)"
-                        )
-                    } catch (e: Exception) {
-                        Log.e("SearchHistory", "Failed to save device to history: ${e.message}")
-                    }
+                try {
+                    database.searchHistoryDao().insertHistoryItem(historyItem)
+                    Log.d(
+                        "SearchHistory",
+                        "Successfully saved device to history: $deviceName ($macAddress)"
+                    )
+                } catch (e: Exception) {
+                    Log.e("SearchHistory", "Failed to save device to history: ${e.message}")
+                }
 
 
             } catch (e: Exception) {
@@ -235,46 +261,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action: String? = intent?.action
             if (BluetoothDevice.ACTION_FOUND == action) {
-                val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                val device: BluetoothDevice? =
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                 device?.let {
-                    if (!discoveredDevices.any { d -> d.device.address == it.address }) {
+                    val macAddress = it.address
+                    if (!currentCycleDevices.contains(macAddress)) {
                         val rssi: Short =
                             intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
-                        val deviceInfo = BluetoothDeviceInfo( it, rssi)
+                        val deviceInfo = BluetoothDeviceInfo(it, rssi)
+
                         discoveredDevices.add(deviceInfo)
+                        currentCycleDevices.add(macAddress)
+
                         _devices.value = discoveredDevices.toList()
                         _lastDevice.value = deviceInfo
 
-                        // Сохраняем устройство в историю поиска
                         if (context != null) {
                             saveToSearchHistory(deviceInfo, context)
                         }
 
-                        val mac = it.address
+                        val count = counterList.getOrDefault(macAddress, 0) + 1
+                        counterList[macAddress] = count
+                        Log.d(
+                            "MainViewModel",
+                            "New device: $macAddress, RSSI: $rssi, count: $count"
+                        )
 
-                        val count = counterList.getOrDefault(mac, 0) + 1
-                        counterList[mac] = count
-                        println(counterList)
-
-                        if (count == PROXIMITY_THRESHOLD){
+                        if (count == PROXIMITY_THRESHOLD) {
                             if (context != null) {
-                                val rootView = (context as? Activity)?.window?.decorView?.findViewById<View>(android.R.id.content)
+                                val rootView =
+                                    (context as? Activity)?.window?.decorView?.findViewById<View>(
+                                        android.R.id.content
+                                    )
                                 rootView?.let { view ->
                                     Snackbar.make(
                                         view,
-                                        "Устройство $mac продолжительное время рядом с вами",
+                                        "$macAddress продолжительное время рядом с вами",
                                         Snackbar.LENGTH_LONG
                                     ).show()
                                 }
                             }
-                            counterList[mac] = 0
+                            counterList[macAddress] = 0
                         }
-                        if (context != null && favouriteMacs.contains(mac)) {
-                            val vibrationType = favouriteVibrations[mac] ?: VibrationHelper.DEFAULT_VIBRATION
+
+                        if (context != null && favouriteMacs.contains(macAddress)) {
+                            val vibrationType =
+                                favouriteVibrations[macAddress] ?: VibrationHelper.DEFAULT_VIBRATION
                             vibratePhone(context, vibrationType)
                             Toast.makeText(
                                 context,
-                                "Обнаружено устройство $mac",
+                                "Обнаружено устройство $macAddress",
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -299,5 +335,3 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         bluetoothAdapter?.cancelDiscovery()
     }
 }
-
-// AIzaSyD8b_63WbyJvlw1J8ILa-96LwfEC9A6JJw - api

@@ -2,20 +2,21 @@ package com.citrus.blsc.ui.fav
 
 import android.app.Application
 import android.content.Context
-import android.content.Intent
 import android.widget.TextView
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.map
+import androidx.lifecycle.viewModelScope
+import com.citrus.blsc.data.database.AppDatabase
 import com.citrus.blsc.data.model.FavItem
 import com.citrus.blsc.data.repository.FavItemRepository
+import kotlinx.coroutines.launch
 
 class FavViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FavItemRepository
     val favItems: MutableLiveData<List<FavItem>> = MutableLiveData()
-
-
+    private val database = AppDatabase.getDatabase(application)
+    val error = MutableLiveData<String>()
     init {
         val prefs = application.getSharedPreferences(FavItemRepository.PREF_FAV_ITEMS, Context.MODE_PRIVATE)
         repository = FavItemRepository(prefs)
@@ -59,6 +60,16 @@ class FavViewModel(application: Application) : AndroidViewModel(application) {
     fun getMacs(adapter: FavAdapter, textView: TextView){
         val macs = adapter.extractMacAddresses()
         textView.text = macs.joinToString("\n")
+    }
+
+    fun clearAllFavHistory(){
+        viewModelScope.launch {
+            try {
+                database.deviceCoordinateDao().deleteAllFavCoordinates()
+            } catch (e: Exception) {
+                error.value = e.message
+            }
+        }
     }
 
 

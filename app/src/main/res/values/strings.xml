@@ -41,4 +41,9 @@
     <string name="delete_record_confirmation">Вы уверены, что хотите удалить эту запись из истории?</string>
     <string name="clear_history_confirmation">Вы уверены, что хотите очистить всю историю поиска? Это действие нельзя отменить.</string>
     <string name="cancel">Отмена</string>
+    <string name="download_moscow_map">Скачать карту Москвы</string>
+    <string name="delete_offline_map">Удалить оффлайн карту</string>
+    <string name="map_download_progress">Загрузка карты: %d%%</string>
+    <string name="download_complete">Загрузка завершена!</string>
+    <string name="download_error">Ошибка загрузки</string>
 </resources>

@@ -18,4 +18,7 @@ interface DeviceCoordinateDao {
 
     @Query("SELECT time FROM device_coordinates WHERE macAddress = :macAddress LIMIT 1")
     suspend fun getTimeByMac(macAddress: String): String?
+
+    @Query("DELETE FROM device_coordinates")
+    suspend fun deleteAllFavCoordinates()
 }

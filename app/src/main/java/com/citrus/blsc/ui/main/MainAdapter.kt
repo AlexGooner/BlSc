@@ -3,7 +3,6 @@ package com.citrus.blsc.ui.main
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -20,10 +19,9 @@ import com.citrus.blsc.ui.fav.FavActivity
 import com.citrus.blsc.R
 import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 
-class MainAdapter(private val devicess: List<BluetoothDeviceInfo>, private val context: Context) :
+class MainAdapter(private val devices: List<BluetoothDeviceInfo>, private val context: Context) :
     RecyclerView.Adapter<MainAdapter.ViewHolder>() {
 
     @SuppressLint("SimpleDateFormat")
@@ -40,7 +38,7 @@ class MainAdapter(private val devicess: List<BluetoothDeviceInfo>, private val c
     @SuppressLint("SetTextI18n")
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val deviceInfo = devicess[position]
+        val deviceInfo = devices[position]
         val device = deviceInfo.device
         if (ContextCompat.checkSelfPermission(
                 holder.itemView.context,
@@ -51,14 +49,12 @@ class MainAdapter(private val devicess: List<BluetoothDeviceInfo>, private val c
             holder.nameTextView.text = device.name ?: "unnamed"
             holder.macAddressTextView.text = device.address
 
-            // Получаем текущее время при каждом связывании
             val currentTime = dateFormat.format(Date())
             holder.timeTextView.text = currentTime
 
-            holder.rssiTextView.text = "RSSI: ${deviceInfo.rssi} dBm" // Отображение RSSI
+            holder.rssiTextView.text = "RSSI: ${deviceInfo.rssi} dBm"
 
         } else {
-            // Запросить разрешение
             val REQUEST_PERMISSION_BLUETOOTH_CONNECT = 0
             ActivityCompat.requestPermissions(
                 holder.itemView.context as Activity,
@@ -82,7 +78,7 @@ class MainAdapter(private val devicess: List<BluetoothDeviceInfo>, private val c
     }
 
     override fun getItemCount(): Int {
-        return devicess.size
+        return devices.size
     }
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {

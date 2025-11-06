@@ -11,12 +11,11 @@ import android.widget.Button
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import androidx.lifecycle.map
 import androidx.recyclerview.widget.RecyclerView
 import com.citrus.blsc.data.model.FavItem
 import com.citrus.blsc.OnFavItemActionListener
 import com.citrus.blsc.R
-import com.citrus.blsc.ui.map.MapsActivity
+import com.citrus.blsc.ui.map.OfflineMapViewerActivity
 import com.citrus.blsc.utils.UIAnimationHelper
 import com.citrus.blsc.utils.VibrationHelper
 
@@ -40,7 +39,7 @@ class FavAdapter(
 
     @SuppressLint("SetTextI18n")
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        // Анимация появления элемента
+
         UIAnimationHelper.animateCardAppear(holder.itemView, (position * 100).toLong())
 
         val favItem = favItems[position]
@@ -53,8 +52,9 @@ class FavAdapter(
             holder.areaTextView.text = favItem.area
         }
 
-        // Отображаем длину вибрации
-        holder.vibrationTextView.text = VibrationHelper.getVibrationDisplayName(context, favItem.vibrateLong)
+
+        holder.vibrationTextView.text =
+            VibrationHelper.getVibrationDisplayName(context, favItem.vibrateLong)
 
         holder.buttonInfo.setOnClickListener {
             UIAnimationHelper.animateButtonPress(holder.buttonInfo)
@@ -66,24 +66,31 @@ class FavAdapter(
                         listener.removeFavItem(favItem)
                         notifyItemRemoved(position)
                     }
+
                     ACTION_MAP -> {
-                        val intent = Intent(context, MapsActivity::class.java)
+                        val intent = Intent(context, OfflineMapViewerActivity::class.java)
                         intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                         val macAddress = holder.macAddressTextView.text.toString()
                         intent.putExtra("mac", macAddress)
                         context.startActivity(intent)
                     }
+
                     ACTION_EDIT -> {
                         val dialog = AlertDialog.Builder(holder.itemView.context)
-                        val view = LayoutInflater.from(holder.itemView.context).inflate(R.layout.add_device_dialog, null)
+                        val view = LayoutInflater.from(holder.itemView.context)
+                            .inflate(R.layout.add_device_dialog, null)
                         dialog.setView(view)
 
-                        val nameEditText = view.findViewById<android.widget.EditText>(R.id.device_name_edit_text)
-                        val macEditText = view.findViewById<android.widget.EditText>(R.id.mac_address_edit_text)
-                        val areaEditText = view.findViewById<android.widget.EditText>(R.id.area_edit_text)
-                        val vibrationSpinner = view.findViewById<Spinner>(R.id.vibration_duration_spinner)
+                        val nameEditText =
+                            view.findViewById<android.widget.EditText>(R.id.device_name_edit_text)
+                        val macEditText =
+                            view.findViewById<android.widget.EditText>(R.id.mac_address_edit_text)
+                        val areaEditText =
+                            view.findViewById<android.widget.EditText>(R.id.area_edit_text)
+                        val vibrationSpinner =
+                            view.findViewById<Spinner>(R.id.vibration_duration_spinner)
 
-                        // Настройка Spinner для выбора длины вибрации
+
                         val vibrationOptions = arrayOf(
                             context.getString(R.string.vibration_short),
                             context.getString(R.string.vibration_medium),
@@ -96,17 +103,21 @@ class FavAdapter(
                             VibrationHelper.VIBRATION_LONG,
                             VibrationHelper.VIBRATION_CUSTOM
                         )
-                        
-                        val adapter = ArrayAdapter(holder.itemView.context, android.R.layout.simple_spinner_item, vibrationOptions)
+
+                        val adapter = ArrayAdapter(
+                            holder.itemView.context,
+                            android.R.layout.simple_spinner_item,
+                            vibrationOptions
+                        )
                         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
                         vibrationSpinner.adapter = adapter
 
-                        // Pre-fill with current values
+
                         nameEditText.setText(favItem.name)
                         macEditText.setText(favItem.macAddress)
                         areaEditText.setText(favItem.area ?: "")
-                        
-                        // Устанавливаем текущее значение вибрации
+
+
                         val currentVibrationIndex = vibrationValues.indexOf(favItem.vibrateLong)
                         vibrationSpinner.setSelection(if (currentVibrationIndex >= 0) currentVibrationIndex else 1) // По умолчанию средняя
 
@@ -117,13 +128,17 @@ class FavAdapter(
                             val selectedVibrationIndex = vibrationSpinner.selectedItemPosition
                             val updatedVibration = vibrationValues[selectedVibrationIndex]
 
-                            val updatedItem = FavItem(updatedName, updatedMac, favItem.rssi, updatedArea, updatedVibration)
+                            val updatedItem = FavItem(
+                                updatedName,
+                                updatedMac,
+                                favItem.rssi,
+                                updatedArea,
+                                updatedVibration
+                            )
 
-                            // Update list and notify adapter
                             favItems[position] = updatedItem
                             notifyItemChanged(position)
 
-                            // Persist changes via listener
                             listener.saveFavItemToPrefs()
                         }
 
@@ -145,21 +160,17 @@ class FavAdapter(
         return favItems.map { it.macAddress }
     }
 
-    /**
-     * Удаляет дубликаты из списка favItems на основе MAC-адреса.
-     * Оставляет только первое вхождение каждого уникального MAC-адреса.
-     */
     fun removeDuplicates() {
         val uniqueItems = mutableListOf<FavItem>()
         val seenMacAddresses = mutableSetOf<String>()
-        
+
         for (item in favItems) {
             if (!seenMacAddresses.contains(item.macAddress)) {
                 seenMacAddresses.add(item.macAddress)
                 uniqueItems.add(item)
             }
         }
-        
+
         val removedCount = favItems.size - uniqueItems.size
         if (removedCount > 0) {
             favItems.clear()
@@ -168,9 +179,6 @@ class FavAdapter(
         }
     }
 
-    /**
-     * Проверяет, существует ли элемент с указанным MAC-адресом
-     */
     fun hasMacAddress(macAddress: String): Boolean {
         return favItems.any { it.macAddress == macAddress }
     }

@@ -12,7 +12,8 @@ class FavItemRepository(private val sharedPreferences: SharedPreferences) {
 
     fun getFavItems(): List<FavItem> {
         val favItemsJson = sharedPreferences.getString(PREF_FAV_ITEMS, "") ?: return emptyList()
-        return gson.fromJson(favItemsJson, object : TypeToken<List<FavItem>>() {}.type) ?: emptyList()
+        return gson.fromJson(favItemsJson, object : TypeToken<List<FavItem>>() {}.type)
+            ?: emptyList()
     }
 
     fun saveFavItems(favItems: List<FavItem>) {

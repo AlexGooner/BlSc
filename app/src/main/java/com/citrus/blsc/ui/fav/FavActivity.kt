@@ -26,11 +26,10 @@ class FavActivity : AppCompatActivity() {
 
     private lateinit var viewModel: FavViewModel
     private lateinit var recyclerViewAdapter: FavAdapter
-    private lateinit var binding : ActivityFavouriteBinding
+    private lateinit var binding: ActivityFavouriteBinding
 
     @SuppressLint("NotifyDataSetChanged")
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Применяем тему перед созданием UI
         ThemeHelper.applyTheme(this)
         super.onCreate(savedInstanceState)
         binding = ActivityFavouriteBinding.inflate(layoutInflater)
@@ -71,7 +70,15 @@ class FavActivity : AppCompatActivity() {
         val vibrateLong = VibrationHelper.DEFAULT_VIBRATION
         if (comingDeviceName != null && comingMacAddress != null) {
             // Проверяем дубликаты перед добавлением элемента, пришедшего через Intent
-            viewModel.addFavItem(FavItem(comingDeviceName, comingMacAddress, comingRssi, comingArea, vibrateLong))
+            viewModel.addFavItem(
+                FavItem(
+                    comingDeviceName,
+                    comingMacAddress,
+                    comingRssi,
+                    comingArea,
+                    vibrateLong
+                )
+            )
         }
 
 
@@ -86,7 +93,6 @@ class FavActivity : AppCompatActivity() {
             val areaEditText = view.findViewById<EditText>(R.id.area_edit_text)
             val vibrationSpinner = view.findViewById<Spinner>(R.id.vibration_duration_spinner)
 
-            // Настройка Spinner для выбора длины вибрации
             val vibrationOptions = arrayOf(
                 getString(R.string.vibration_short),
                 getString(R.string.vibration_medium),
@@ -99,7 +105,7 @@ class FavActivity : AppCompatActivity() {
                 VibrationHelper.VIBRATION_LONG,
                 VibrationHelper.VIBRATION_CUSTOM
             )
-            
+
             val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, vibrationOptions)
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             vibrationSpinner.adapter = adapter
@@ -112,7 +118,7 @@ class FavActivity : AppCompatActivity() {
                 val area = areaEditText.text.toString()
                 val selectedVibrationIndex = vibrationSpinner.selectedItemPosition
                 val vibrateLong = vibrationValues[selectedVibrationIndex]
-                
+
                 // Проверяем, не существует ли уже элемент с таким MAC-адресом
                 if (recyclerViewAdapter.hasMacAddress(macAddress)) {
                     AlertDialog.Builder(this)
@@ -136,6 +142,7 @@ class FavActivity : AppCompatActivity() {
             alertDialog.setMessage("Вы уверены, что хотите очистить список избранных устройств?")
             alertDialog.setPositiveButton("Очистить") { _, _ ->
                 viewModel.clearFavItems()
+                viewModel.clearAllFavHistory()
             }
             alertDialog.setNegativeButton("Отмена") { _, _ -> }
             alertDialog.show()
@@ -149,16 +156,16 @@ class FavActivity : AppCompatActivity() {
             val arrayList = ArrayList<String>()
             arrayList.addAll(lines)
             intent.putStringArrayListExtra("macs", arrayList)
-            
-            // Создаем карту MAC -> vibration type
-            val vibrationMap = recyclerViewAdapter.favItems.associate { it.macAddress to it.vibrateLong }
+
+            val vibrationMap =
+                recyclerViewAdapter.favItems.associate { it.macAddress to it.vibrateLong }
             intent.putExtra("vibrations", vibrationMap as HashMap<String, String>)
-            
+
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             AnimationHelper.startActivityWithAnimation(this, intent)
         }
     }
-    
+
     override fun onBackPressed() {
         super.onBackPressed()
         AnimationHelper.finishActivityWithAnimation(this)
