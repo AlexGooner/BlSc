@@ -1,5 +1,6 @@
 package com.citrus.blsc.ui.map
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -11,21 +12,28 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.citrus.blsc.R
+import com.google.android.material.textfield.TextInputEditText
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.ScaleBarOverlay
 import org.osmdroid.views.overlay.compass.CompassOverlay
 import org.osmdroid.views.overlay.compass.InternalCompassOrientationProvider
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.io.File
+import java.text.DecimalFormat
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 class OfflineMapActivity : AppCompatActivity() {
 
@@ -36,7 +44,12 @@ class OfflineMapActivity : AppCompatActivity() {
         private const val MOSCOW_LAT = 55.7558
         private const val MOSCOW_LON = 37.6173
         private const val DEFAULT_ZOOM = 10.0
-
+        private const val DEFAULT_NORTH = 55.9111
+        private const val DEFAULT_SOUTH = 55.5690
+        private const val DEFAULT_EAST = 37.8553
+        private const val DEFAULT_WEST = 37.3686
+        private const val DEFAULT_MIN_ZOOM = 10
+        private const val DEFAULT_MAX_ZOOM = 16
         // Bounding box Москвы
         private val MOSCOW_BOUNDING_BOX = OfflineMapManager.BoundingBox(
             north = 55.9111,
@@ -51,14 +64,23 @@ class OfflineMapActivity : AppCompatActivity() {
     private var btnDownloadMap: Button? = null
     private var btnDeleteMap: Button? = null
     private var btnViewOfflineMap: Button? = null
+    private var btnTestCoordinates: Button? = null
+    private var btnZoomInfo: Button? = null
     private var layoutProgress: LinearLayout? = null
     private var progressBar: ProgressBar? = null
     private var tvProgress: TextView? = null
 
+    private var editNorth: TextInputEditText? = null
+    private var editSouth: TextInputEditText? = null
+    private var editEast: TextInputEditText? = null
+    private var editWest: TextInputEditText? = null
+    private var editMinZoom: TextInputEditText? = null
+    private var editMaxZoom: TextInputEditText? = null
     // Оверлеи карты
     private var locationOverlay: MyLocationNewOverlay? = null
     private var compassOverlay: CompassOverlay? = null
     private var scaleBarOverlay: ScaleBarOverlay? = null
+    private var boundingBoxOverlay: Polygon? = null
 
     // Менеджер оффлайн карт
     private var offlineMapManager: OfflineMapManager? = null
@@ -74,7 +96,7 @@ class OfflineMapActivity : AppCompatActivity() {
         Log.d(TAG, "=== OfflineMapActivity started ===")
 
         try {
-            // Инициализация OSMDroid конфигурации ДО всего остального
+            // Инициализация OSMDroid конфигурации
             initializeOsmdroid()
 
             // Инициализация UI элементов
@@ -89,7 +111,7 @@ class OfflineMapActivity : AppCompatActivity() {
             // Проверка существующих оффлайн карт
             checkExistingOfflineMaps()
 
-            // Проверка разрешений (только для местоположения)
+            // Проверка разрешений
             checkPermissions()
 
             Log.d(TAG, "=== OfflineMapActivity initialized successfully ===")
@@ -102,10 +124,8 @@ class OfflineMapActivity : AppCompatActivity() {
 
     private fun initializeOsmdroid() {
         try {
-            // Установка пользовательского агента (обязательно)
             Configuration.getInstance().userAgentValue = packageName
 
-            // Настройка кэш тайлов
             val osmdroidBasePath = getExternalFilesDir(null)?.let {
                 File(it, "osmdroid")
             }
@@ -115,7 +135,6 @@ class OfflineMapActivity : AppCompatActivity() {
                 val tileCache = File(it, "tile-cache")
                 Configuration.getInstance().osmdroidTileCache = tileCache
 
-                // Создание директории, если не существуют
                 if (!it.exists()) it.mkdirs()
                 if (!tileCache.exists()) tileCache.mkdirs()
 
@@ -128,29 +147,31 @@ class OfflineMapActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun initializeUI() {
         try {
+            // Основные элементы
             mapView = findViewById(R.id.mapView)
             btnDownloadMap = findViewById(R.id.btnDownloadMap)
             btnDeleteMap = findViewById(R.id.btnDeleteMap)
             btnViewOfflineMap = findViewById(R.id.btnViewOfflineMap)
+            btnZoomInfo = findViewById(R.id.btnZoomInfo)
             layoutProgress = findViewById(R.id.layoutProgress)
             progressBar = findViewById(R.id.progressBar)
             tvProgress = findViewById(R.id.tvProgress)
 
-            // Проверяем что все элементы найдены
-            if (btnDownloadMap == null) {
-                Log.e(TAG, "btnDownloadMap не найден в layout!")
-                Toast.makeText(this, "Ошибка: кнопка не найдена", Toast.LENGTH_LONG).show()
-                return
-            }
-
-            Log.d(TAG, "Все UI элементы найдены, настраиваем клики...")
+            // Поля ввода
+            editNorth = findViewById(R.id.editNorth)
+            editSouth = findViewById(R.id.editSouth)
+            editEast = findViewById(R.id.editEast)
+            editWest = findViewById(R.id.editWest)
+            editMinZoom = findViewById(R.id.editMinZoom)
+            editMaxZoom = findViewById(R.id.editMaxZoom)
 
             // Настройка обработчиков кликов
             btnDownloadMap?.setOnClickListener {
                 Log.d(TAG, "Кнопка download нажата!")
-                downloadMoscowMap()
+                downloadMapWithSettings()
             }
 
             btnDeleteMap?.setOnClickListener {
@@ -161,6 +182,16 @@ class OfflineMapActivity : AppCompatActivity() {
             btnViewOfflineMap?.setOnClickListener {
                 Log.d(TAG, "Кнопка view offline map нажата!")
                 startOfflineMapViewer()
+            }
+
+            btnTestCoordinates?.setOnClickListener {
+                Log.d(TAG, "Кнопка test coordinates нажата!")
+                showBoundingBoxOnMap()
+            }
+
+            btnZoomInfo?.setOnClickListener {
+                Log.d(TAG, "Кнопка zoom info нажата!")
+                showZoomInfoDialog()
             }
 
             // Скрываем прогресс по умолчанию
@@ -194,6 +225,7 @@ class OfflineMapActivity : AppCompatActivity() {
             mapView.minZoomLevel = 5.0
             mapView.maxZoomLevel = 18.0
 
+            // Компас
             compassOverlay = CompassOverlay(
                 this,
                 InternalCompassOrientationProvider(this),
@@ -202,7 +234,7 @@ class OfflineMapActivity : AppCompatActivity() {
             compassOverlay?.enableCompass()
             mapView.overlays.add(compassOverlay)
 
-            // Добавляем шкалу масштаба
+            // Шкала масштаба
             scaleBarOverlay = ScaleBarOverlay(mapView)
             scaleBarOverlay?.setCentred(true)
             scaleBarOverlay?.setScaleBarOffset(
@@ -211,11 +243,12 @@ class OfflineMapActivity : AppCompatActivity() {
             )
             mapView.overlays.add(scaleBarOverlay)
 
-            // Добавляем слой текущего местоположения
+            // Слой текущего местоположения
             if (hasLocationPermission()) {
                 enableLocationOverlay()
             }
 
+            // Добавляем маркер центра Москвы
             addMoscowMarker()
 
             Log.d(TAG, "Карта успешно настроена")
@@ -233,10 +266,10 @@ class OfflineMapActivity : AppCompatActivity() {
             val moscowMarker = Marker(mapView)
             moscowMarker.position = GeoPoint(MOSCOW_LAT, MOSCOW_LON)
             moscowMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            moscowMarker.title = "Москва"
-            moscowMarker.snippet = "Столица России"
+            moscowMarker.title = "Центр Москвы"
+            moscowMarker.snippet = "Широта: $MOSCOW_LAT, Долгота: $MOSCOW_LON"
             moscowMarker.setOnMarkerClickListener { marker, mapView ->
-                Toast.makeText(this, "Москва - столица России", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Центр Москвы", Toast.LENGTH_SHORT).show()
                 true
             }
             mapView.overlays.add(moscowMarker)
@@ -264,8 +297,106 @@ class OfflineMapActivity : AppCompatActivity() {
         }
     }
 
-    private fun downloadMoscowMap() {
-        Log.d(TAG, "=== downloadMoscowMap called ===")
+    private fun showBoundingBoxOnMap() {
+        try {
+            val boundingBox = getBoundingBoxFromInput()
+            val mapView = mapView ?: return
+
+            // Удаляем предыдущий bounding box
+            boundingBoxOverlay?.let {
+                mapView.overlays.remove(it)
+            }
+
+            // Создаем новый bounding box overlay
+            boundingBoxOverlay = Polygon().apply {
+                points = listOf(
+                    GeoPoint(boundingBox.north, boundingBox.west),
+                    GeoPoint(boundingBox.north, boundingBox.east),
+                    GeoPoint(boundingBox.south, boundingBox.east),
+                    GeoPoint(boundingBox.south, boundingBox.west),
+                    GeoPoint(boundingBox.north, boundingBox.west) // Замыкаем полигон
+                )
+                fillColor = 0x22FF0000 // Полупрозрачный красный
+                strokeColor = 0x22FF0000 // Красный
+                strokeWidth = 3.0f
+                title = "Выбранная область"
+            }
+
+            mapView.overlays.add(boundingBoxOverlay)
+
+            // Центрируем карту на bounding box
+            val osmdroidBoundingBox = BoundingBox(
+                boundingBox.north,
+                boundingBox.east,
+                boundingBox.south,
+                boundingBox.west
+            )
+
+            mapView.zoomToBoundingBox(osmdroidBoundingBox, true, 50)
+            mapView.invalidate()
+
+            // Показываем информацию о площади
+            val areaKm2 = calculateAreaKm2(boundingBox)
+            val formatter = DecimalFormat("#.##")
+            Toast.makeText(
+                this,
+                "Область показана на карте. Примерная площадь: ${formatter.format(areaKm2)} км²",
+                Toast.LENGTH_LONG
+            ).show()
+
+            Log.d(TAG, "Bounding box показан на карте: $boundingBox")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка показа bounding box", e)
+            Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun calculateAreaKm2(bbox: OfflineMapManager.BoundingBox): Double {
+        // Простой расчет площади в квадратных километрах
+        val latDiff = bbox.north - bbox.south
+        val lonDiff = bbox.east - bbox.west
+
+        // 1 градус широты ≈ 111 км, 1 градус долготы ≈ 111 км * cos(широты)
+        val latKm = latDiff * 111.0
+        val avgLat = (bbox.north + bbox.south) / 2.0
+        val lonKm = lonDiff * 111.0 * Math.cos(Math.toRadians(avgLat))
+
+        return Math.abs(latKm * lonKm)
+    }
+
+    private fun showZoomInfoDialog() {
+        val message = """
+            Уровни масштабирования карты:
+            
+            0-5: Континенты, страны
+            6-9: Области, крупные города
+            10-12: Города, районы
+            13-15: Улицы, здания
+            16-18: Детальные планы, внутренние помещения
+            
+            Рекомендации:
+            • Для навигации по городу: 10-12
+            • Для детального просмотра улиц: 13-15
+            • Для максимальной детализации: 16-18
+            
+            Внимание: Чем выше уровни zoom, тем больше тайлов нужно загрузить и больше места потребуется!
+            
+            Примерное количество тайлов для Москвы:
+            • Zoom 10-12: 50-200 тайлов
+            • Zoom 10-15: 500-2000 тайлов
+            • Zoom 10-18: 5000-20000 тайлов
+        """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("Уровни масштабирования (zoom)")
+            .setMessage(message)
+            .setPositiveButton("Понятно") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun downloadMapWithSettings() {
+        Log.d(TAG, "=== downloadMapWithSettings called ===")
 
         val manager = offlineMapManager ?: run {
             Log.e(TAG, "Менеджер карт null!")
@@ -275,18 +406,165 @@ class OfflineMapActivity : AppCompatActivity() {
 
         Log.d(TAG, "Менеджер карт доступен")
 
-        // Проверяем только необходимые разрешения (местоположение)
+        // Проверяем разрешения
         if (!checkPermissions()) {
             Log.d(TAG, "Ждем разрешения для местоположения...")
             return
         }
 
-        // Немедленно начинаем загрузку - хранилище больше не требует разрешений
-        startMapDownload()
+        // Получаем настройки из полей ввода
+        try {
+            val boundingBox = getBoundingBoxFromInput()
+            val minZoom = getMinZoomFromInput()
+            val maxZoom = getMaxZoomFromInput()
+
+            // Проверяем корректность введенных данных
+            if (!isValidInput(boundingBox, minZoom, maxZoom)) {
+                return
+            }
+
+            // Показываем подтверждение
+            showDownloadConfirmation(boundingBox, minZoom, maxZoom) {
+                startMapDownload(boundingBox, minZoom, maxZoom)
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка получения настроек: ${e.message}")
+            Toast.makeText(this, "Ошибка в настройках: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun getBoundingBoxFromInput(): OfflineMapManager.BoundingBox {
+        val north = editNorth?.text.toString().toDoubleOrNull() ?: DEFAULT_NORTH
+        val south = editSouth?.text.toString().toDoubleOrNull() ?: DEFAULT_SOUTH
+        val east = editEast?.text.toString().toDoubleOrNull() ?: DEFAULT_EAST
+        val west = editWest?.text.toString().toDoubleOrNull() ?: DEFAULT_WEST
+
+        return OfflineMapManager.BoundingBox(north, south, east, west)
+    }
+
+    private fun getMinZoomFromInput(): Int {
+        return editMinZoom?.text.toString().toIntOrNull() ?: DEFAULT_MIN_ZOOM
+    }
+
+    private fun getMaxZoomFromInput(): Int {
+        return editMaxZoom?.text.toString().toIntOrNull() ?: DEFAULT_MAX_ZOOM
+    }
+
+    private fun isValidInput(
+        boundingBox: OfflineMapManager.BoundingBox,
+        minZoom: Int,
+        maxZoom: Int
+    ): Boolean {
+        // Проверка bounding box
+        if (boundingBox.north <= boundingBox.south) {
+            Toast.makeText(this, "Северная граница должна быть больше южной", Toast.LENGTH_LONG).show()
+            return false
+        }
+
+        if (boundingBox.east <= boundingBox.west) {
+            Toast.makeText(this, "Восточная граница должна быть больше западной", Toast.LENGTH_LONG).show()
+            return false
+        }
+
+        // Проверка уровней zoom
+        if (minZoom < 0 || minZoom > 18) {
+            Toast.makeText(this, "Минимальный zoom должен быть от 0 до 18", Toast.LENGTH_LONG).show()
+            return false
+        }
+
+        if (maxZoom < 0 || maxZoom > 18) {
+            Toast.makeText(this, "Максимальный zoom должен быть от 0 до 18", Toast.LENGTH_LONG).show()
+            return false
+        }
+
+        if (minZoom > maxZoom) {
+            Toast.makeText(this, "Минимальный zoom не может быть больше максимального", Toast.LENGTH_LONG).show()
+            return false
+        }
+
+        // Проверка разницы уровней zoom
+        val zoomDiff = maxZoom - minZoom
+        if (zoomDiff > 6) {
+            // Используем CompletableFuture или другой механизм для ожидания ответа
+            val confirmationFuture = CompletableFuture<Boolean>()
+
+            AlertDialog.Builder(this)
+                .setTitle("Большой диапазон zoom")
+                .setMessage("Выбранный диапазон zoom ($minZoom-$maxZoom) может потребовать загрузки очень большого количества тайлов (десятки тысяч). Это займет много времени и места. Вы уверены?")
+                .setPositiveButton("Продолжить") { dialog, _ ->
+                    dialog.dismiss()
+                    confirmationFuture.complete(true)
+                }
+                .setNegativeButton("Отмена") { dialog, _ ->
+                    dialog.dismiss()
+                    confirmationFuture.complete(false)
+                }
+                .setOnCancelListener {
+                    confirmationFuture.complete(false)
+                }
+                .show()
+
+            // Блокируем поток до получения ответа
+            return try {
+                // Таймаут 30 секунд на случай если пользователь не ответит
+                confirmationFuture.get(30, TimeUnit.SECONDS)
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка ожидания подтверждения: ${e.message}")
+                false
+            }
+        }
+
+        return true
+    }
+
+    private fun showDownloadConfirmation(
+        boundingBox: OfflineMapManager.BoundingBox,
+        minZoom: Int,
+        maxZoom: Int,
+        onConfirm: () -> Unit
+    ) {
+        val areaKm2 = calculateAreaKm2(boundingBox)
+        val formatter = DecimalFormat("#.##")
+
+        val message = """
+            Параметры загрузки:
+            
+            Область:
+            • Север: ${boundingBox.north}
+            • Юг: ${boundingBox.south}
+            • Восток: ${boundingBox.east}
+            • Запад: ${boundingBox.west}
+            • Примерная площадь: ${formatter.format(areaKm2)} км²
+            
+            Уровни масштабирования:
+            • Минимальный: $minZoom
+            • Максимальный: $maxZoom
+            • Всего уровней: ${maxZoom - minZoom + 1}
+            
+            Внимание: Загрузка может занять несколько минут и потребовать места на устройстве.
+            Продолжить?
+        """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("Подтверждение загрузки")
+            .setMessage(message)
+            .setPositiveButton("Загрузить") { dialog, _ ->
+                dialog.dismiss()
+                onConfirm()
+            }
+            .setNegativeButton("Отмена") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 
 
-    private fun startMapDownload() {
+    private fun startMapDownload(
+        boundingBox: OfflineMapManager.BoundingBox,
+        minZoom: Int,
+        maxZoom: Int
+    ) {
         Log.d(TAG, "=== startMapDownload ===")
 
         val manager = offlineMapManager ?: return
@@ -298,13 +576,14 @@ class OfflineMapActivity : AppCompatActivity() {
         progressBar?.progress = 0
         tvProgress?.text = "Подготовка к загрузке..."
 
-        Log.d(TAG, "Запускаем загрузку с bounding box: $MOSCOW_BOUNDING_BOX")
+        Log.d(TAG, "Запускаем загрузку с параметрами:")
+        Log.d(TAG, "Bounding box: $boundingBox")
+        Log.d(TAG, "Zoom levels: $minZoom-$maxZoom")
 
-        // ЗАГРУЖАЕМ БОЛЕЕ ВЫСОКИЕ УРОВНИ ZOOM ДЛЯ ЛУЧШЕЙ ДЕТАЛИЗАЦИИ
         manager.downloadMapArea(
-            boundingBox = MOSCOW_BOUNDING_BOX,
-            minZoom = 10,    // Обзорный вид
-            maxZoom = 16,    // Детальный вид улиц (вместо 12)
+            boundingBox = boundingBox,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
             callback = object : OfflineMapManager.DownloadCallback {
                 override fun onProgress(progress: Int, message: String) {
                     Log.d(TAG, "Прогресс: $progress% - $message")
@@ -330,7 +609,7 @@ class OfflineMapActivity : AppCompatActivity() {
 
                         Toast.makeText(
                             this@OfflineMapActivity,
-                            "Оффлайн карта Москвы загружена с высокой детализацией!",
+                            "Оффлайн карта успешно загружена!",
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -359,7 +638,7 @@ class OfflineMapActivity : AppCompatActivity() {
     private fun deleteOfflineMap() {
         try {
             offlineMapManager?.deleteOfflineMaps()
-            btnDownloadMap?.text = "Скачать карту Москвы"
+            btnDownloadMap?.text = "Скачать карту"
             btnDownloadMap?.isEnabled = true
             btnViewOfflineMap?.isEnabled = false
             Toast.makeText(this, "Оффлайн карты удалены", Toast.LENGTH_SHORT).show()
@@ -369,7 +648,6 @@ class OfflineMapActivity : AppCompatActivity() {
             Toast.makeText(this, "Ошибка удаления карт", Toast.LENGTH_SHORT).show()
         }
     }
-
 
     private fun startOfflineMapViewer() {
         val manager = offlineMapManager ?: return
@@ -398,6 +676,7 @@ class OfflineMapActivity : AppCompatActivity() {
             }
         }
     }
+
 
     private fun checkPermissions(): Boolean {
         Log.d(TAG, "Проверяем разрешения...")
@@ -428,54 +707,6 @@ class OfflineMapActivity : AppCompatActivity() {
             this,
             android.Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-    }
-
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        Log.d(TAG, "onRequestPermissionsResult: requestCode=$requestCode")
-        Log.d(TAG, "Запрошенные разрешения: ${permissions.joinToString()}")
-        Log.d(TAG, "Результаты: ${grantResults.joinToString()}")
-
-        when (requestCode) {
-            PERMISSION_REQUEST_CODE -> {
-                val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-
-                if (allGranted) {
-                    Log.d(TAG, "Все разрешения предоставлены!")
-
-                    // Включаем слой местоположения
-                    enableLocationOverlay()
-
-                    Toast.makeText(this, "Разрешения предоставлены!", Toast.LENGTH_SHORT).show()
-
-                    // Если мы ждали разрешений для загрузки карты, начинаем загрузку
-                    if (layoutProgress?.visibility == LinearLayout.VISIBLE) {
-                        Log.d(TAG, "Разрешения получены, продолжаем загрузку карты")
-                        startMapDownload()
-                    }
-                } else {
-                    Log.w(TAG, "Не все разрешения предоставлены")
-
-                    Toast.makeText(
-                        this,
-                        "Некоторые функции карты могут не работать без разрешения местоположения",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    // Все равно позволяем загружать карты, просто без функционала местоположения
-                    if (layoutProgress?.visibility == LinearLayout.VISIBLE) {
-                        Log.d(TAG, "Разрешения не получены, но продолжаем загрузку карты")
-                        startMapDownload()
-                    }
-                }
-            }
-        }
     }
 
 
