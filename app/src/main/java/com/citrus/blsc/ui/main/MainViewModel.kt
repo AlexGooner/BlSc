@@ -75,8 +75,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         scanning = true
 
-        // Не очищаем discoveredDevices здесь - они очищаются в clearCycleData()
-
         _devices.value = discoveredDevices.toList()
 
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
@@ -98,9 +96,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         Log.d("MainViewModel", "Scanning started. Current devices: ${discoveredDevices.size}")
     }
+
     fun getCountersSnapshot(): Map<String, Int> {
         return counterList.toMap()
     }
+
     @SuppressLint("MissingPermission")
     fun stopScanning(context: Context) {
         if (scanning) {
@@ -111,8 +111,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 context.unregisterReceiver(receiver)
             } catch (e: IllegalArgumentException) {
             }
-
-            // Не очищаем счетчики при остановке, только при clearAllData
             Log.d("MainViewModel", "Scanning stopped (counters preserved)")
         }
     }
@@ -122,13 +120,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         currentLongitude = longitude
         Log.d("MainViewModel", "Coordinates set: $latitude, $longitude")
     }
+
     // Очищает только UI данные (вызывается каждый цикл)
     fun clearCycleData() {
         discoveredDevices.clear() // Очищаем список обнаруженных устройств
         currentCycleDevices.clear() // Очищаем устройства текущего цикла
         _devices.value = emptyList() // Очищаем LiveData
         _lastDevice.value = null // Сбрасываем последнее устройство
-        Log.d("MainViewModel", "Cycle data cleared (counters preserved). Devices: ${discoveredDevices.size}")
+        Log.d(
+            "MainViewModel",
+            "Cycle data cleared (counters preserved). Devices: ${discoveredDevices.size}"
+        )
     }
 
     // Очищает только устройства текущего цикла (для предотвращения дублирования в рамках одного цикла)
@@ -137,11 +139,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("MainViewModel", "Current cycle devices cleared. Ready for new cycle.")
     }
 
-    // Метод для начала нового цикла сканирования
-    fun startNewScanCycle(context: Context) {
-        resetCurrentCycle() // Очищаем устройства текущего цикла
-        startScanning(context) // Запускаем сканирование
-    }
     fun clearAllData() {
         discoveredDevices.clear()
         currentCycleDevices.clear()
@@ -151,9 +148,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _lastDevice.value = null
         Log.d("MainViewModel", "All data and counters cleared")
     }
-    fun getDeviceCount(macAddress: String): Int {
-        return counterList.getOrDefault(macAddress, 0)
-    }
+
     fun startTimer(textView: TextView) {
         startTime = System.currentTimeMillis()
         timer = object : CountDownTimer(Long.MAX_VALUE, 1000) {
@@ -191,35 +186,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-
-    fun getLocation(context: Context) {
-        val fusedLocationClient: FusedLocationProviderClient =
-            LocationServices.getFusedLocationProviderClient(context)
-
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            _location.value = "Разрешение на доступ к местоположению не предоставлено"
-            return
-        }
-
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            _location.value = if (location != null) {
-                "${location.latitude} ${location.longitude}"
-            } else {
-                "Координаты недоступны"
-            }
-        }.addOnFailureListener { exception ->
-            Log.e("LocationError", "Failed to get location: ${exception.message}")
-
-            _location.value = "Координаты недоступны"
-        }
-    }
 
     fun saveToSearchHistory(deviceInfo: BluetoothDeviceInfo, context: Context) {
         viewModelScope.launch {
@@ -336,7 +302,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 // Сбрасываем счетчик после показа уведомления
                                 counterList[macAddress] = 0
 
-                                Log.d("MainViewModel", "Proximity threshold reached for $macAddress")
+                                Log.d(
+                                    "MainViewModel",
+                                    "Proximity threshold reached for $macAddress"
+                                )
                             }
                         }
 

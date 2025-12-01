@@ -64,6 +64,19 @@ import java.util.concurrent.TimeoutException
 
 class MainActivity() : AppCompatActivity() {
 
+
+    private lateinit var binding: ActivityMainBinding
+    private val viewModel: MainViewModel by viewModels()
+    private lateinit var adapter: MainAdapter
+    private var devices = mutableListOf<BluetoothDeviceInfo>()
+    private var job: Job? = null
+    private var favouriteMacs: List<String> = emptyList()
+    private var favouriteVibrations: Map<String, String> = emptyMap()
+    private lateinit var db: AppDatabase
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var currentLocation: String? = null
+    private var isScanning = false
+    private var scanningJob: Job? = null
     private val bluetoothStateReceiver = BluetoothStateReceiver()
     private val locationStateReceiver = LocationStateReceiver()
     private var isMonitoringState = false
@@ -107,18 +120,6 @@ class MainActivity() : AppCompatActivity() {
             .show()
     }
 
-    private lateinit var binding: ActivityMainBinding
-    private val viewModel: MainViewModel by viewModels()
-    private lateinit var adapter: MainAdapter
-    private var devices = mutableListOf<BluetoothDeviceInfo>()
-    private var job: Job? = null
-    private var favouriteMacs: List<String> = emptyList()
-    private var favouriteVibrations: Map<String, String> = emptyMap()
-    private lateinit var db: AppDatabase
-    private var wakeLock: PowerManager.WakeLock? = null
-    private var currentLocation: String? = null
-    private var isScanning = false
-    private var scanningJob: Job? = null
 
     @SuppressLint("SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -163,7 +164,7 @@ class MainActivity() : AppCompatActivity() {
             job = null
             viewModel.stopScanning(this)
             viewModel.stopTimer()
-            stopScanningProcess() // Этот метод теперь сам вызывает clearAllData()
+            stopScanningProcess()
             binding.lottieAnimation.isVisible = false
         }
 
@@ -301,7 +302,10 @@ class MainActivity() : AppCompatActivity() {
 
                     // Если координаты не получены, ждем и пробуем еще раз
                     if (currentCoordinates.first == null || currentCoordinates.second == null) {
-                        Log.w("MainActivity", "Координаты не получены, пробуем еще раз через 2 секунды")
+                        Log.w(
+                            "MainActivity",
+                            "Координаты не получены, пробуем еще раз через 2 секунды"
+                        )
                         delay(2000)
 
                         val retryCoordinates = withContext(Dispatchers.IO) {
@@ -458,8 +462,6 @@ class MainActivity() : AppCompatActivity() {
         binding.mainTextView.text = ""
         binding.mapsTextView.text = ""
         Log.d("MainActivity", "UI text views cleared")
-
-        // RecyclerView очищается через адаптер при обновлении данных из ViewModel
     }
 
     private fun getCurrentCoordinatesSync(): Pair<Double?, Double?> {
@@ -479,17 +481,12 @@ class MainActivity() : AppCompatActivity() {
             val callback = object : LocationCallback() {
                 override fun onLocationResult(locationResult: LocationResult) {
                     locationResult.lastLocation?.let { location ->
-                        // Получаем координаты
                         val coordinates = Pair(location.latitude, location.longitude)
                         Log.d(
                             "MainActivity",
                             "Получены координаты: ${location.latitude}, ${location.longitude}"
                         )
-
-                        // Удаляем обновления чтобы не тратить батарею
                         removeLocationUpdates()
-
-                        // Завершаем Future с координатами
                         if (!locationFuture.isDone) {
                             locationFuture.complete(coordinates)
                         }
@@ -499,7 +496,6 @@ class MainActivity() : AppCompatActivity() {
 
             this.locationCallback = callback
 
-            // Создаем LocationRequest с использованием Builder (не deprecated)
             val locationRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
                     .setMinUpdateIntervalMillis(2000)
@@ -507,7 +503,6 @@ class MainActivity() : AppCompatActivity() {
                     .setMaxUpdateDelayMillis(10000)
                     .build()
             } else {
-                // Для старых версий используем create(), но с обновленными полями
                 @Suppress("DEPRECATION")
                 LocationRequest.create().apply {
                     priority = LocationRequest.PRIORITY_HIGH_ACCURACY
@@ -571,52 +566,6 @@ class MainActivity() : AppCompatActivity() {
                 Log.e("MainActivity", "Ошибка удаления обновлений локации: ${e.message}")
             }
             locationCallback = null
-        }
-    }
-
-    private fun requestLocationSettings() {
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-
-        // Создаем LocationRequest с использованием Builder
-        val locationRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
-                .setMinUpdateIntervalMillis(5000)
-                .build()
-        } else {
-            @Suppress("DEPRECATION")
-            LocationRequest.create().apply {
-                priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-                interval = 10000
-                fastestInterval = 5000
-            }
-        }
-
-        val builder = LocationSettingsRequest.Builder()
-            .addLocationRequest(locationRequest)
-            .setAlwaysShow(true) // Показать диалог даже если настройки в порядке
-
-        val client: SettingsClient = LocationServices.getSettingsClient(this)
-        val task = client.checkLocationSettings(builder.build())
-
-        task.addOnSuccessListener {
-            Log.d("MainActivity", "Настройки локации в порядке")
-        }
-
-        task.addOnFailureListener { exception ->
-            if (exception is ResolvableApiException) {
-                try {
-                    Log.d("MainActivity", "Показываем диалог включения GPS")
-                    exception.startResolutionForResult(this, REQUEST_CHECK_SETTINGS)
-                } catch (sendEx: IntentSender.SendIntentException) {
-                    Log.e("MainActivity", "Ошибка показа диалога GPS: ${sendEx.message}")
-                }
-            }
         }
     }
 
@@ -836,7 +785,7 @@ class MainActivity() : AppCompatActivity() {
 
     override fun onDestroy() {
         stopScanningProcess()
-        unregisterStateReceivers() // Добавьте эту строку
+        unregisterStateReceivers()
         removeLocationUpdates()
         super.onDestroy()
     }
