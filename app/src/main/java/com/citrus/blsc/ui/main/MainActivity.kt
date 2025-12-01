@@ -2,8 +2,11 @@ package com.citrus.blsc.ui.main
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
@@ -51,15 +54,24 @@ import com.google.android.gms.location.SettingsClient
 import com.google.android.gms.common.api.ResolvableApiException
 import android.content.IntentSender
 import android.os.Looper
+import androidx.annotation.RequiresPermission
+import com.citrus.blsc.utils.NotificationHelper
+import com.citrus.blsc.utils.PermissionHelper
 import com.google.android.gms.location.Priority
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 class MainActivity() : AppCompatActivity() {
+
+    private val bluetoothStateReceiver = BluetoothStateReceiver()
+    private val locationStateReceiver = LocationStateReceiver()
+    private var isMonitoringState = false
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var locationCallback: LocationCallback? = null
+    private val REQUEST_ENABLE_BT = 1002
     private val REQUEST_CHECK_SETTINGS = 1001
+    private val REQUEST_NOTIFICATION_PERMISSION = 1003
     private val launcher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             val allGranted = permissions.values.all { it }
@@ -115,7 +127,7 @@ class MainActivity() : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
+        NotificationHelper.createNotificationChannel(this)
 
         checkPermissions()
         binding.lottieAnimation.isVisible = false
@@ -135,7 +147,7 @@ class MainActivity() : AppCompatActivity() {
                 showLocationEnableDialog()
                 return@setOnClickListener
             }
-            clearList()
+            clearUI()
             startScanningProcess()
         }
 
@@ -151,7 +163,7 @@ class MainActivity() : AppCompatActivity() {
             job = null
             viewModel.stopScanning(this)
             viewModel.stopTimer()
-            stopScanningProcess()
+            stopScanningProcess() // Этот метод теперь сам вызывает clearAllData()
             binding.lottieAnimation.isVisible = false
         }
 
@@ -249,19 +261,39 @@ class MainActivity() : AppCompatActivity() {
     }
 
     private fun startScanningProcess() {
+        // Проверяем все требования перед началом
+        if (!checkAndRequestRequirements()) {
+            return
+        }
+
         isScanning = true
         acquireWakeLock()
 
-        // Проверяем настройки локации перед началом
-        requestLocationSettings()
+        // Начинаем мониторинг состояния
+        registerStateReceivers()
 
         scanningJob = CoroutineScope(Dispatchers.Main).launch {
             var cycleCount = 0
 
             while (isActive && isScanning) {
-                cycleCount++
-                Log.d("MainActivity", "Starting scanning cycle $cycleCount")
+                // Проверяем требования в начале каждого цикла
+                if (!areRequirementsMet()) {
+                    showMissingRequirementsDialog()
+                    stopScanningProcess()
+                    break
+                }
 
+                cycleCount++
+                Log.d("MainActivity", "=== Starting scanning cycle $cycleCount ===")
+
+                // 1. Очищаем данные предыдущего цикла
+                withContext(Dispatchers.Main) {
+                    viewModel.clearCycleData() // Очищаем устройства в ViewModel
+                    clearUI() // Очищаем UI
+                    Log.d("MainActivity", "Cleared previous cycle data")
+                }
+
+                // 2. Получаем координаты
                 try {
                     val currentCoordinates = withContext(Dispatchers.IO) {
                         getCurrentCoordinatesSync()
@@ -282,8 +314,6 @@ class MainActivity() : AppCompatActivity() {
                                 retryCoordinates.second
                             )
                             updateLocationText(retryCoordinates.first, retryCoordinates.second)
-                            binding.mainTextView.text =
-                                viewModel.getLocation(this@MainActivity).toString()
                         }
                     } else {
                         withContext(Dispatchers.Main) {
@@ -292,19 +322,21 @@ class MainActivity() : AppCompatActivity() {
                                 currentCoordinates.second
                             )
                             updateLocationText(currentCoordinates.first, currentCoordinates.second)
-                            binding.mainTextView.text =
-                                viewModel.getLocation(this@MainActivity).toString()
                         }
                     }
+
+                    // 3. Запускаем сканирование Bluetooth
                     if (areAllPermissionsGranted()) {
                         try {
-                            viewModel.startScanning(
-                                this@MainActivity,
-                                binding.mainTextView.text.toString(),
-                                binding.mapsTextView.text.toString(),
-                                binding.mainTextView,
-                                binding.mapsTextView
-                            )
+                            withContext(Dispatchers.Main) {
+                                viewModel.startScanning(
+                                    this@MainActivity,
+                                    binding.mainTextView.text.toString(),
+                                    binding.mapsTextView.text.toString(),
+                                    binding.mainTextView,
+                                    binding.mapsTextView
+                                )
+                            }
                         } catch (securityException: SecurityException) {
                             Log.e(
                                 "MainActivity",
@@ -318,10 +350,16 @@ class MainActivity() : AppCompatActivity() {
                     } else {
                         break
                     }
+
+                    // 4. Ждем 15 секунд сканирования
                     delay(15000)
+
+                    // 5. Останавливаем сканирование
                     if (areAllPermissionsGranted()) {
                         try {
-                            viewModel.stopScanning(this@MainActivity)
+                            withContext(Dispatchers.Main) {
+                                viewModel.stopScanning(this@MainActivity)
+                            }
                         } catch (securityException: SecurityException) {
                             Log.e(
                                 "MainActivity",
@@ -331,10 +369,8 @@ class MainActivity() : AppCompatActivity() {
                     } else {
                         break
                     }
-                    withContext(Dispatchers.Main) {
-                        clearList()
-                        Log.d("MainActivity", "Cycle $cycleCount completed, list cleared")
-                    }
+
+                    // 6. Ждем 1 секунду между циклами
                     delay(1000)
 
                 } catch (cancellationException: CancellationException) {
@@ -353,11 +389,77 @@ class MainActivity() : AppCompatActivity() {
         Toast.makeText(this, "Scanning started", Toast.LENGTH_SHORT).show()
     }
 
+    private fun checkAndRequestRequirements(): Boolean {
+        val missingRequirements = PermissionHelper.getMissingRequirements(this)
+
+        if (missingRequirements.isEmpty()) {
+            return true
+        }
+
+        showRequirementsDialog(missingRequirements)
+        return false
+    }
+
+    private fun areRequirementsMet(): Boolean {
+        return PermissionHelper.areAllRequirementsMet(this)
+    }
+
+    private fun showRequirementsDialog(missingRequirements: List<String>) {
+        val message = StringBuilder("Для работы сканирования необходимо:\n\n")
+        missingRequirements.forEach { requirement ->
+            message.append("• $requirement\n")
+        }
+        message.append("\nВключите недостающие функции и повторите попытку.")
+
+        AlertDialog.Builder(this)
+            .setTitle("Требования не выполнены")
+            .setMessage(message.toString())
+            .setPositiveButton("Настройки") { dialog, _ ->
+                dialog.dismiss()
+                openSettingsForMissingRequirements(missingRequirements)
+            }
+            .setNegativeButton("Отмена") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showMissingRequirementsDialog() {
+        val missingRequirements = PermissionHelper.getMissingRequirements(this)
+        if (missingRequirements.isNotEmpty()) {
+            showRequirementsDialog(missingRequirements)
+        }
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun openSettingsForMissingRequirements(missingRequirements: List<String>) {
+        if (missingRequirements.contains("Включенный Bluetooth")) {
+            PermissionHelper.requestEnableBluetooth(this, REQUEST_ENABLE_BT)
+        } else if (missingRequirements.contains("Включенная геолокация (GPS)")) {
+            PermissionHelper.requestEnableLocation(this)
+        } else if (missingRequirements.contains("Разрешения Bluetooth и локации")) {
+            checkPermissions()
+        }
+    }
+
     @SuppressLint("NotifyDataSetChanged")
     private fun clearList() {
-        viewModel.clearAllData()
+        // Используем clearCycleData вместо clearAllData
+        viewModel.clearCycleData()
         devices.clear()
         adapter.notifyDataSetChanged()
+        Log.d("MainActivity", "UI list cleared (counters preserved)")
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    private fun clearUI() {
+        // Очищаем только отображение, но не трогаем данные в ViewModel
+        binding.mainTextView.text = ""
+        binding.mapsTextView.text = ""
+        Log.d("MainActivity", "UI text views cleared")
+
+        // RecyclerView очищается через адаптер при обновлении данных из ViewModel
     }
 
     private fun getCurrentCoordinatesSync(): Pair<Double?, Double?> {
@@ -379,7 +481,10 @@ class MainActivity() : AppCompatActivity() {
                     locationResult.lastLocation?.let { location ->
                         // Получаем координаты
                         val coordinates = Pair(location.latitude, location.longitude)
-                        Log.d("MainActivity", "Получены координаты: ${location.latitude}, ${location.longitude}")
+                        Log.d(
+                            "MainActivity",
+                            "Получены координаты: ${location.latitude}, ${location.longitude}"
+                        )
 
                         // Удаляем обновления чтобы не тратить батарею
                         removeLocationUpdates()
@@ -536,13 +641,19 @@ class MainActivity() : AppCompatActivity() {
         viewModel.stopScanning(this)
         viewModel.stopTimer()
 
+        unregisterStateReceivers()
+
         releaseWakeLock()
 
         binding.lottieAnimation.isVisible = false
         binding.startBtn.isEnabled = true
         binding.stopBtn.isEnabled = false
 
-        Toast.makeText(this, "Scanning stopped", Toast.LENGTH_SHORT).show()
+        // Очищаем все данные включая счетчики при полной остановке
+        viewModel.clearAllData()
+        clearUI()
+
+        Toast.makeText(this, "Сканирование остановлено", Toast.LENGTH_SHORT).show()
     }
 
     private fun updateLocationText(latitude: Double?, longitude: Double?) {
@@ -630,9 +741,11 @@ class MainActivity() : AppCompatActivity() {
     @SuppressLint("NotifyDataSetChanged")
     private fun observeViewModel() {
         viewModel.devices.observe(this) { newDevices ->
+            // Каждый раз получаем свежий список от ViewModel
             devices.clear()
             devices.addAll(newDevices)
             adapter.notifyDataSetChanged()
+            Log.d("MainActivity", "Devices list updated: ${devices.size} devices")
         }
     }
 
@@ -651,20 +764,23 @@ class MainActivity() : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        val isAllGranted = REQUEST_PERMISSIONS.all { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-        }
+        val permissionsToRequest = REQUEST_PERMISSIONS.filter { permission ->
+            ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
+        }.toTypedArray()
 
-        if (isAllGranted) {
-            Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show()
+        if (permissionsToRequest.isNotEmpty()) {
+            launcher.launch(permissionsToRequest)
         } else {
-            launcher.launch(REQUEST_PERMISSIONS)
+            Toast.makeText(this, "Все разрешения предоставлены", Toast.LENGTH_SHORT).show()
         }
     }
 
 
     companion object {
-        private fun getRequiredPermissions(): Array<String> {
+        private const val REQUEST_ENABLE_BT = 1002
+        private const val REQUEST_CHECK_SETTINGS = 1001
+
+        fun getRequiredPermissions(): Array<String> {
             val permissions = mutableListOf<String>()
 
             permissions.apply {
@@ -681,6 +797,11 @@ class MainActivity() : AppCompatActivity() {
                         add(Manifest.permission.BLUETOOTH)
                         add(Manifest.permission.BLUETOOTH_ADMIN)
                     }
+                }
+
+                // Добавляем разрешение на уведомления для Android 13+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    add(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
 
@@ -715,6 +836,8 @@ class MainActivity() : AppCompatActivity() {
 
     override fun onDestroy() {
         stopScanningProcess()
+        unregisterStateReceivers() // Добавьте эту строку
+        removeLocationUpdates()
         super.onDestroy()
     }
 
@@ -728,20 +851,130 @@ class MainActivity() : AppCompatActivity() {
                         Log.d("MainActivity", "Пользователь включил GPS")
                         Toast.makeText(this, "GPS включен", Toast.LENGTH_SHORT).show()
                     }
+
                     RESULT_CANCELED -> {
                         Log.w("MainActivity", "Пользователь отказался включать GPS")
-                        Toast.makeText(this,
+                        Toast.makeText(
+                            this,
                             "Для работы сканирования требуется включить GPS",
                             Toast.LENGTH_LONG
                         ).show()
-                        // Можно остановить сканирование
-                        stopScanningProcess()
+                    }
+                }
+            }
+
+            REQUEST_ENABLE_BT -> {
+                when (resultCode) {
+                    RESULT_OK -> {
+                        Log.d("MainActivity", "Пользователь включил Bluetooth")
+                        Toast.makeText(this, "Bluetooth включен", Toast.LENGTH_SHORT).show()
+                    }
+
+                    RESULT_CANCELED -> {
+                        Log.w("MainActivity", "Пользователь отказался включать Bluetooth")
+                        Toast.makeText(
+                            this,
+                            "Для работы сканирования требуется включить Bluetooth",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+
+            REQUEST_NOTIFICATION_PERMISSION -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ContextCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.d("MainActivity", "Разрешение на уведомления предоставлено")
+                    } else {
+                        Log.w("MainActivity", "Разрешение на уведомления не предоставлено")
+                        Toast.makeText(
+                            this,
+                            "Уведомления о найденных устройствах не будут показываться",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
             }
         }
     }
 
+    private inner class BluetoothStateReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    val state =
+                        intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    when (state) {
+                        BluetoothAdapter.STATE_OFF -> {
+                            Log.w("MainActivity", "Bluetooth выключен")
+                            showErrorAndStopScanning("Bluetooth выключен. Сканирование остановлено.")
+                        }
+
+                        BluetoothAdapter.STATE_TURNING_OFF -> {
+                            Log.w("MainActivity", "Bluetooth выключается")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private inner class LocationStateReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (LocationManager.PROVIDERS_CHANGED_ACTION == intent.action) {
+                if (!PermissionHelper.isLocationEnabled(this@MainActivity)) {
+                    Log.w("MainActivity", "Геолокация выключена")
+                    showErrorAndStopScanning("Геолокация выключена. Сканирование остановлено.")
+                }
+            }
+        }
+    }
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    private fun registerStateReceivers() {
+        if (!isMonitoringState) {
+            // Регистрируем receiver для Bluetooth
+            val bluetoothFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+            registerReceiver(bluetoothStateReceiver, bluetoothFilter)
+
+            // Регистрируем receiver для геолокации
+            val locationFilter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
+            registerReceiver(locationStateReceiver, locationFilter)
+
+            isMonitoringState = true
+            Log.d("MainActivity", "State receivers registered")
+        }
+    }
+
+    private fun unregisterStateReceivers() {
+        if (isMonitoringState) {
+            try {
+                unregisterReceiver(bluetoothStateReceiver)
+            } catch (e: IllegalArgumentException) {
+                // Already unregistered
+            }
+
+            try {
+                unregisterReceiver(locationStateReceiver)
+            } catch (e: IllegalArgumentException) {
+                // Already unregistered
+            }
+
+            isMonitoringState = false
+            Log.d("MainActivity", "State receivers unregistered")
+        }
+    }
+
+    private fun showErrorAndStopScanning(message: String) {
+        runOnUiThread {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            binding.stopBtn.performClick() // Останавливаем сканирование
+        }
+    }
 
 }
 

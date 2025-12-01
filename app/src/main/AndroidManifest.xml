@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -59,6 +60,14 @@
             </intent-filter>
 
         </activity>
+
+        <receiver
+            android:name=".utils.NotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="COPY_MAC_ACTION" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".ui.main.MainActivity"

@@ -27,6 +27,7 @@ import androidx.lifecycle.viewModelScope
 import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import com.citrus.blsc.data.model.SearchHistoryItem
 import com.citrus.blsc.data.database.AppDatabase
+import com.citrus.blsc.utils.NotificationHelper
 import com.citrus.blsc.utils.TextFileHelper
 import com.citrus.blsc.utils.VibrationHelper
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -62,18 +63,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var currentLatitude: Double? = null
     private var currentLongitude: Double? = null
     private val currentCycleDevices = mutableSetOf<String>()
+    private var isNewCycle = true
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     fun startScanning(
         context: Context,
-        text: String,
-        textTwo: String,
-        textView: TextView,
-        textViewTwo: TextView
+        text: String? = null,
+        textTwo: String? = null,
+        textView: TextView? = null,
+        textViewTwo: TextView? = null
     ) {
         scanning = true
 
-        currentCycleDevices.clear()
+        // Не очищаем discoveredDevices здесь - они очищаются в clearCycleData()
 
         _devices.value = discoveredDevices.toList()
 
@@ -81,16 +83,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         try {
             context.unregisterReceiver(receiver)
         } catch (e: IllegalArgumentException) {
+            // Receiver не был зарегистрирован
         }
         context.registerReceiver(receiver, filter)
         bluetoothAdapter?.startDiscovery()
 
-        textFileHelper = TextFileHelper(context)
-        textFileHelper.writeToFile(text)
-        clear(textView)
-        clear(textViewTwo)
-    }
+        // Опционально: работа с текстовыми файлами
+        if (text != null && textView != null && textViewTwo != null) {
+            textFileHelper = TextFileHelper(context)
+            textFileHelper.writeToFile(text)
+            clear(textView)
+            clear(textViewTwo)
+        }
 
+        Log.d("MainViewModel", "Scanning started. Current devices: ${discoveredDevices.size}")
+    }
+    fun getCountersSnapshot(): Map<String, Int> {
+        return counterList.toMap()
+    }
     @SuppressLint("MissingPermission")
     fun stopScanning(context: Context) {
         if (scanning) {
@@ -102,9 +112,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: IllegalArgumentException) {
             }
 
-            Toast.makeText(context, "Scanning is over", Toast.LENGTH_SHORT).show()
+            // Не очищаем счетчики при остановке, только при clearAllData
+            Log.d("MainViewModel", "Scanning stopped (counters preserved)")
         }
-
     }
 
     fun setCurrentCoordinates(latitude: Double?, longitude: Double?) {
@@ -112,17 +122,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         currentLongitude = longitude
         Log.d("MainViewModel", "Coordinates set: $latitude, $longitude")
     }
+    // Очищает только UI данные (вызывается каждый цикл)
+    fun clearCycleData() {
+        discoveredDevices.clear() // Очищаем список обнаруженных устройств
+        currentCycleDevices.clear() // Очищаем устройства текущего цикла
+        _devices.value = emptyList() // Очищаем LiveData
+        _lastDevice.value = null // Сбрасываем последнее устройство
+        Log.d("MainViewModel", "Cycle data cleared (counters preserved). Devices: ${discoveredDevices.size}")
+    }
 
+    // Очищает только устройства текущего цикла (для предотвращения дублирования в рамках одного цикла)
+    fun resetCurrentCycle() {
+        currentCycleDevices.clear() // Очищаем только устройства текущего цикла
+        Log.d("MainViewModel", "Current cycle devices cleared. Ready for new cycle.")
+    }
+
+    // Метод для начала нового цикла сканирования
+    fun startNewScanCycle(context: Context) {
+        resetCurrentCycle() // Очищаем устройства текущего цикла
+        startScanning(context) // Запускаем сканирование
+    }
     fun clearAllData() {
         discoveredDevices.clear()
         currentCycleDevices.clear()
-        _devices.value = emptyList()
-        counterList.clear()
+        counterList.clear() // Очищаем счетчики
         vibratedDevices.clear()
+        _devices.value = emptyList()
         _lastDevice.value = null
-        Log.d("MainViewModel", "All data cleared")
+        Log.d("MainViewModel", "All data and counters cleared")
     }
-
+    fun getDeviceCount(macAddress: String): Int {
+        return counterList.getOrDefault(macAddress, 0)
+    }
     fun startTimer(textView: TextView) {
         startTime = System.currentTimeMillis()
         timer = object : CountDownTimer(Long.MAX_VALUE, 1000) {
@@ -265,14 +296,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                 device?.let {
                     val macAddress = it.address
+
+                    // Проверяем, видели ли мы это устройство в текущем цикле
                     if (!currentCycleDevices.contains(macAddress)) {
                         val rssi: Short =
                             intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
                         val deviceInfo = BluetoothDeviceInfo(it, rssi)
 
+                        // Добавляем в список обнаруженных устройств
                         discoveredDevices.add(deviceInfo)
                         currentCycleDevices.add(macAddress)
 
+                        // Обновляем LiveData
                         _devices.value = discoveredDevices.toList()
                         _lastDevice.value = deviceInfo
 
@@ -280,40 +315,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             saveToSearchHistory(deviceInfo, context)
                         }
 
-                        val count = counterList.getOrDefault(macAddress, 0) + 1
-                        counterList[macAddress] = count
+                        // Обновляем счетчик
+                        val currentCount = counterList.getOrDefault(macAddress, 0)
+                        val newCount = currentCount + 1
+                        counterList[macAddress] = newCount
+
                         Log.d(
                             "MainViewModel",
-                            "New device: $macAddress, RSSI: $rssi, count: $count"
+                            "Device found: $macAddress, RSSI: $rssi, cycle count: ${currentCycleDevices.size}, total count: $newCount"
                         )
 
-                        if (count == PROXIMITY_THRESHOLD) {
+                        // Проверяем порог
+                        if (newCount >= PROXIMITY_THRESHOLD) {
                             if (context != null) {
-                                val rootView =
-                                    (context as? Activity)?.window?.decorView?.findViewById<View>(
-                                        android.R.id.content
-                                    )
-                                rootView?.let { view ->
-                                    Snackbar.make(
-                                        view,
-                                        "$macAddress продолжительное время рядом с вами",
-                                        Snackbar.LENGTH_LONG
-                                    ).show()
-                                }
+                                NotificationHelper.showDeviceProximityNotification(
+                                    context,
+                                    macAddress
+                                )
+
+                                // Сбрасываем счетчик после показа уведомления
+                                counterList[macAddress] = 0
+
+                                Log.d("MainViewModel", "Proximity threshold reached for $macAddress")
                             }
-                            counterList[macAddress] = 0
                         }
 
                         if (context != null && favouriteMacs.contains(macAddress)) {
                             val vibrationType =
                                 favouriteVibrations[macAddress] ?: VibrationHelper.DEFAULT_VIBRATION
                             vibratePhone(context, vibrationType)
-                            Toast.makeText(
-                                context,
-                                "Обнаружено устройство $macAddress",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            Log.d("MainViewModel", "Favourite device detected: $macAddress")
                         }
+                    } else {
+                        // Устройство уже было обнаружено в этом цикле
+                        Log.v("MainViewModel", "Device $macAddress already seen in current cycle")
                     }
                 }
             }
