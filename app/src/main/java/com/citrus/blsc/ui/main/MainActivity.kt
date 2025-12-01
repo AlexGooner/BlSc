@@ -32,6 +32,8 @@ import com.citrus.blsc.ui.settings.SettingsActivity
 import com.citrus.blsc.utils.AnimationHelper
 import com.citrus.blsc.utils.ThemeHelper
 import com.citrus.blsc.utils.UIAnimationHelper
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.CancellationException
@@ -42,11 +44,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationSettingsRequest
+import com.google.android.gms.location.SettingsClient
+import com.google.android.gms.common.api.ResolvableApiException
+import android.content.IntentSender
+import android.os.Looper
+import com.google.android.gms.location.Priority
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
-
+import java.util.concurrent.TimeoutException
 
 class MainActivity() : AppCompatActivity() {
-
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var locationCallback: LocationCallback? = null
+    private val REQUEST_CHECK_SETTINGS = 1001
     private val launcher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             val allGranted = permissions.values.all { it }
@@ -101,10 +114,11 @@ class MainActivity() : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
 
         checkPermissions()
         binding.lottieAnimation.isVisible = false
-
         setupRecyclerView()
         observeViewModel()
         check()
@@ -238,6 +252,9 @@ class MainActivity() : AppCompatActivity() {
         isScanning = true
         acquireWakeLock()
 
+        // Проверяем настройки локации перед началом
+        requestLocationSettings()
+
         scanningJob = CoroutineScope(Dispatchers.Main).launch {
             var cycleCount = 0
 
@@ -250,14 +267,34 @@ class MainActivity() : AppCompatActivity() {
                         getCurrentCoordinatesSync()
                     }
 
-                    withContext(Dispatchers.Main) {
-                        viewModel.setCurrentCoordinates(
-                            currentCoordinates.first,
-                            currentCoordinates.second
-                        )
-                        updateLocationText(currentCoordinates.first, currentCoordinates.second)
-                        binding.mainTextView.text =
-                            viewModel.getLocation(this@MainActivity).toString()
+                    // Если координаты не получены, ждем и пробуем еще раз
+                    if (currentCoordinates.first == null || currentCoordinates.second == null) {
+                        Log.w("MainActivity", "Координаты не получены, пробуем еще раз через 2 секунды")
+                        delay(2000)
+
+                        val retryCoordinates = withContext(Dispatchers.IO) {
+                            getCurrentCoordinatesSync()
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            viewModel.setCurrentCoordinates(
+                                retryCoordinates.first,
+                                retryCoordinates.second
+                            )
+                            updateLocationText(retryCoordinates.first, retryCoordinates.second)
+                            binding.mainTextView.text =
+                                viewModel.getLocation(this@MainActivity).toString()
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            viewModel.setCurrentCoordinates(
+                                currentCoordinates.first,
+                                currentCoordinates.second
+                            )
+                            updateLocationText(currentCoordinates.first, currentCoordinates.second)
+                            binding.mainTextView.text =
+                                viewModel.getLocation(this@MainActivity).toString()
+                        }
                     }
                     if (areAllPermissionsGranted()) {
                         try {
@@ -316,6 +353,7 @@ class MainActivity() : AppCompatActivity() {
         Toast.makeText(this, "Scanning started", Toast.LENGTH_SHORT).show()
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     private fun clearList() {
         viewModel.clearAllData()
         devices.clear()
@@ -329,19 +367,151 @@ class MainActivity() : AppCompatActivity() {
                     Manifest.permission.ACCESS_FINE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
+                Log.w("MainActivity", "Нет разрешения на доступ к локации")
                 return Pair(null, null)
             }
 
-            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-            val location = Tasks.await(fusedLocationClient.lastLocation, 5, TimeUnit.SECONDS)
+            val locationFuture = CompletableFuture<Pair<Double?, Double?>>()
 
-            location?.let {
-                Pair(it.latitude, it.longitude)
-            } ?: Pair(null, null)
+            // Создаем LocationCallback
+            val callback = object : LocationCallback() {
+                override fun onLocationResult(locationResult: LocationResult) {
+                    locationResult.lastLocation?.let { location ->
+                        // Получаем координаты
+                        val coordinates = Pair(location.latitude, location.longitude)
+                        Log.d("MainActivity", "Получены координаты: ${location.latitude}, ${location.longitude}")
+
+                        // Удаляем обновления чтобы не тратить батарею
+                        removeLocationUpdates()
+
+                        // Завершаем Future с координатами
+                        if (!locationFuture.isDone) {
+                            locationFuture.complete(coordinates)
+                        }
+                    }
+                }
+            }
+
+            this.locationCallback = callback
+
+            // Создаем LocationRequest с использованием Builder (не deprecated)
+            val locationRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
+                    .setMinUpdateIntervalMillis(2000)
+                    .setMaxUpdates(1)
+                    .setMaxUpdateDelayMillis(10000)
+                    .build()
+            } else {
+                // Для старых версий используем create(), но с обновленными полями
+                @Suppress("DEPRECATION")
+                LocationRequest.create().apply {
+                    priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+                    interval = 5000
+                    fastestInterval = 2000
+                    numUpdates = 1
+                    maxWaitTime = 10000
+                }
+            }
+
+            // Запрашиваем обновления локации
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                callback,
+                Looper.getMainLooper()
+            )
+
+            Log.d("MainActivity", "Запрошены обновления локации")
+
+            // Таймаут 15 секунд
+            try {
+                val result = locationFuture.get(15, TimeUnit.SECONDS)
+                Log.d("MainActivity", "Координаты получены успешно")
+                result
+            } catch (e: TimeoutException) {
+                Log.e("MainActivity", "Таймаут получения локации (15 сек)")
+
+                // Пробуем получить последнюю известную локацию как запасной вариант
+                try {
+                    val lastLocationTask = fusedLocationClient.lastLocation
+                    val lastLocation = Tasks.await(lastLocationTask, 2, TimeUnit.SECONDS)
+
+                    lastLocation?.let { location ->
+                        Pair(location.latitude, location.longitude)
+                    } ?: run {
+                        Log.e("MainActivity", "Нет кэшированной локации")
+                        Pair(null, null)
+                    }
+                } catch (ex: Exception) {
+                    Log.e("MainActivity", "Ошибка получения кэшированной локации: ${ex.message}")
+                    Pair(null, null)
+                }
+            } finally {
+                // Всегда удаляем обновления
+                removeLocationUpdates()
+            }
 
         } catch (e: Exception) {
-            Log.e("MainActivity", "Error getting coordinates: ${e.message}")
+            Log.e("MainActivity", "Общая ошибка получения координат: ${e.message}")
+            removeLocationUpdates()
             Pair(null, null)
+        }
+    }
+
+    private fun removeLocationUpdates() {
+        locationCallback?.let { callback ->
+            try {
+                fusedLocationClient.removeLocationUpdates(callback)
+                Log.d("MainActivity", "Обновления локации остановлены")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Ошибка удаления обновлений локации: ${e.message}")
+            }
+            locationCallback = null
+        }
+    }
+
+    private fun requestLocationSettings() {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        // Создаем LocationRequest с использованием Builder
+        val locationRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
+                .setMinUpdateIntervalMillis(5000)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            LocationRequest.create().apply {
+                priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+                interval = 10000
+                fastestInterval = 5000
+            }
+        }
+
+        val builder = LocationSettingsRequest.Builder()
+            .addLocationRequest(locationRequest)
+            .setAlwaysShow(true) // Показать диалог даже если настройки в порядке
+
+        val client: SettingsClient = LocationServices.getSettingsClient(this)
+        val task = client.checkLocationSettings(builder.build())
+
+        task.addOnSuccessListener {
+            Log.d("MainActivity", "Настройки локации в порядке")
+        }
+
+        task.addOnFailureListener { exception ->
+            if (exception is ResolvableApiException) {
+                try {
+                    Log.d("MainActivity", "Показываем диалог включения GPS")
+                    exception.startResolutionForResult(this, REQUEST_CHECK_SETTINGS)
+                } catch (sendEx: IntentSender.SendIntentException) {
+                    Log.e("MainActivity", "Ошибка показа диалога GPS: ${sendEx.message}")
+                }
+            }
         }
     }
 
@@ -546,6 +716,30 @@ class MainActivity() : AppCompatActivity() {
     override fun onDestroy() {
         stopScanningProcess()
         super.onDestroy()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        when (requestCode) {
+            REQUEST_CHECK_SETTINGS -> {
+                when (resultCode) {
+                    RESULT_OK -> {
+                        Log.d("MainActivity", "Пользователь включил GPS")
+                        Toast.makeText(this, "GPS включен", Toast.LENGTH_SHORT).show()
+                    }
+                    RESULT_CANCELED -> {
+                        Log.w("MainActivity", "Пользователь отказался включать GPS")
+                        Toast.makeText(this,
+                            "Для работы сканирования требуется включить GPS",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        // Можно остановить сканирование
+                        stopScanningProcess()
+                    }
+                }
+            }
+        }
     }
 
 

@@ -2,6 +2,7 @@ package com.citrus.blsc.data.repository
 
 import android.content.SharedPreferences
 import com.citrus.blsc.data.model.FavItem
+import com.citrus.blsc.utils.VibrationHelper
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -17,7 +18,15 @@ class FavItemRepository(private val sharedPreferences: SharedPreferences) {
     }
 
     fun saveFavItems(favItems: List<FavItem>) {
-        val favItemsJson = gson.toJson(favItems)
+        // Очистим null значения перед сохранением
+        val cleanedFavItems = favItems.map { item ->
+            if (item.vibrateLong == null) {
+                item.copy(vibrateLong = VibrationHelper.DEFAULT_VIBRATION)
+            } else {
+                item
+            }
+        }
+        val favItemsJson = gson.toJson(cleanedFavItems)
         sharedPreferences.edit().putString(PREF_FAV_ITEMS, favItemsJson).apply()
     }
 

@@ -53,8 +53,8 @@ class FavAdapter(
         }
 
 
-        holder.vibrationTextView.text =
-            VibrationHelper.getVibrationDisplayName(context, favItem.vibrateLong)
+        val vibrationText = VibrationHelper.getVibrationDisplayName(context, favItem.vibrateLong)
+        holder.vibrationTextView.text = vibrationText
 
         holder.buttonInfo.setOnClickListener {
             UIAnimationHelper.animateButtonPress(holder.buttonInfo)

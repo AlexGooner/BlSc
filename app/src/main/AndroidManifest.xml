@@ -45,21 +45,24 @@
             android:exported="false"
             android:label="@string/title_activity_maps"
             android:screenOrientation="portrait" />
+
+
         <activity
             android:name=".ui.fav.FavActivity"
             android:exported="true"
             tools:ignore="DiscouragedApi"
-            android:screenOrientation="portrait">
-
+            android:screenOrientation="fullSensor">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
+
         <activity
             android:name=".ui.main.MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:screenOrientation="portrait"
             tools:ignore="DiscouragedApi"
             >
@@ -82,7 +85,7 @@
 
         <activity android:name=".ui.map.OfflineMapActivity"
 
-            android:exported="false">
+            android:exported="true">
 
 
         </activity>

@@ -69,14 +69,16 @@ class FavActivity : AppCompatActivity() {
         val comingArea = ""
         val vibrateLong = VibrationHelper.DEFAULT_VIBRATION
         if (comingDeviceName != null && comingMacAddress != null) {
-            // Проверяем дубликаты перед добавлением элемента, пришедшего через Intent
+            // Используем безопасное значение для вибрации
+            val safeVibrateLong = vibrateLong ?: VibrationHelper.DEFAULT_VIBRATION
+
             viewModel.addFavItem(
                 FavItem(
                     comingDeviceName,
                     comingMacAddress,
                     comingRssi,
                     comingArea,
-                    vibrateLong
+                    safeVibrateLong
                 )
             )
         }
@@ -127,7 +129,9 @@ class FavActivity : AppCompatActivity() {
                         .setPositiveButton("OK") { _, _ -> }
                         .show()
                 } else {
-                    viewModel.addFavItem(FavItem(deviceName, macAddress, rssi, area, vibrateLong))
+                    // Убедимся что vibrateLong не null
+                    val safeVibrateLong = vibrateLong ?: VibrationHelper.DEFAULT_VIBRATION
+                    viewModel.addFavItem(FavItem(deviceName, macAddress, rssi, area, safeVibrateLong))
                 }
             }
 
