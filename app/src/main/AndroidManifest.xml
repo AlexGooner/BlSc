@@ -61,6 +61,12 @@
 
         </activity>
 
+        <activity android:name=".ui.dbviewer.DatabaseViewerActivity"
+            android:exported="false"
+            android:screenOrientation="fullSensor"
+            tools:ignore="DiscouragedApi">
+        </activity>
+
         <receiver
             android:name=".utils.NotificationActionReceiver"
             android:exported="false">
@@ -72,7 +78,7 @@
         <activity
             android:name=".ui.main.MainActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
+            android:screenOrientation="fullSensor"
             tools:ignore="DiscouragedApi"
             >
         </activity>

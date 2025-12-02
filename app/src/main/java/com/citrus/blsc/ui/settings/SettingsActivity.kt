@@ -9,6 +9,7 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import androidx.appcompat.app.AppCompatActivity
 import com.citrus.blsc.R
+import com.citrus.blsc.ui.dbviewer.DatabaseViewerActivity
 import com.citrus.blsc.ui.map.OfflineMapActivity
 import com.citrus.blsc.utils.AnimationHelper
 import com.citrus.blsc.utils.ThemeHelper
@@ -18,6 +19,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var themeRadioGroup: RadioGroup
     private lateinit var backButton: Button
     private lateinit var mapsButton: Button
+    private lateinit var btnDatabase: Button
 
     @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,12 +31,14 @@ class SettingsActivity : AppCompatActivity() {
         setupThemeSelection()
         setupMapsButton()
         setupBackButton()
+        setupDatabaseButton()
     }
 
     private fun initViews() {
         themeRadioGroup = findViewById(R.id.theme_radio_group)
         backButton = findViewById(R.id.back_button)
         mapsButton = findViewById(R.id.maps_button)
+        btnDatabase = findViewById(R.id.btnDatabase)
     }
 
     private fun setupThemeSelection() {
@@ -56,6 +60,13 @@ class SettingsActivity : AppCompatActivity() {
             }
             ThemeHelper.setThemeMode(this, themeMode)
             recreate()
+        }
+    }
+
+    private fun setupDatabaseButton(){
+        btnDatabase.setOnClickListener {
+            val intent = Intent(this, DatabaseViewerActivity::class.java)
+            startActivity(intent)
         }
     }
 

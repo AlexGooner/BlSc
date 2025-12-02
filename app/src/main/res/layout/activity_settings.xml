@@ -65,6 +65,17 @@
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:textColor="?attr/colorOnBackground" />
 
+    <Button
+        android:id="@+id/btnDatabase"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Просмотреть базу данных"
+        android:layout_marginBottom="16dp"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:textColor="?attr/colorOnBackground">
+
+    </Button>
+
     <!-- Кнопка назад -->
     <Button
         android:id="@+id/back_button"
