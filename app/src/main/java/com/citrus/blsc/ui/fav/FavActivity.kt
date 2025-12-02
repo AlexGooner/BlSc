@@ -69,7 +69,6 @@ class FavActivity : AppCompatActivity() {
         val comingArea = ""
         val vibrateLong = VibrationHelper.DEFAULT_VIBRATION
         if (comingDeviceName != null && comingMacAddress != null) {
-            // Используем безопасное значение для вибрации
             val safeVibrateLong = vibrateLong ?: VibrationHelper.DEFAULT_VIBRATION
 
             viewModel.addFavItem(
@@ -86,7 +85,6 @@ class FavActivity : AppCompatActivity() {
 
         binding.favPlusBtn.setOnClickListener {
             UIAnimationHelper.animateButtonPress(binding.favPlusBtn)
-            // Show dialog to add a new fav item
             val dialog = AlertDialog.Builder(this)
             val view = LayoutInflater.from(this).inflate(R.layout.add_device_dialog, null)
             dialog.setView(view)

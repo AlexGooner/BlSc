@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
@@ -56,7 +55,7 @@ class DatabaseViewerActivity : AppCompatActivity() {
         val fileInfo = DatabaseHelper.getDatabaseFileInfo(this)
         tvDatabaseInfo.text = "Загрузка статистики...\n\n$fileInfo"
 
-        // Загружаем статистику асинхронно
+        // Загружаем статистику
         progressBar.visibility = ProgressBar.VISIBLE
 
         DatabaseHelper.getDatabaseInfo(this) { info ->
@@ -64,7 +63,7 @@ class DatabaseViewerActivity : AppCompatActivity() {
             progressBar.visibility = ProgressBar.GONE
         }
 
-        // Схема базы (не требует корутин)
+        // Схема базы
         val schema = DatabaseHelper.getDatabaseSchema(this)
         tvSchema.text = schema
     }

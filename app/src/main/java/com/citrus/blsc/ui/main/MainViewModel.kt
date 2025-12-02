@@ -97,10 +97,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("MainViewModel", "Scanning started. Current devices: ${discoveredDevices.size}")
     }
 
-    fun getCountersSnapshot(): Map<String, Int> {
-        return counterList.toMap()
-    }
-
     @SuppressLint("MissingPermission")
     fun stopScanning(context: Context) {
         if (scanning) {
@@ -131,12 +127,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "MainViewModel",
             "Cycle data cleared (counters preserved). Devices: ${discoveredDevices.size}"
         )
-    }
-
-    // Очищает только устройства текущего цикла (для предотвращения дублирования в рамках одного цикла)
-    fun resetCurrentCycle() {
-        currentCycleDevices.clear() // Очищаем только устройства текущего цикла
-        Log.d("MainViewModel", "Current cycle devices cleared. Ready for new cycle.")
     }
 
     fun clearAllData() {

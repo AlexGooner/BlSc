@@ -5,15 +5,11 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.os.Environment
 import android.util.Log
-import androidx.room.Room
 import com.citrus.blsc.data.database.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -52,14 +48,13 @@ object DatabaseHelper {
         }
     }
 
-    // Асинхронное получение информации о базе данных
+    //получение информации о базе данных
     fun getDatabaseInfo(context: Context, callback: (String) -> Unit) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val databasePath = context.getDatabasePath("app_database")
                 val db = AppDatabase.getDatabase(context)
 
-                // Вызываем suspend функции в корутине
                 val searchHistoryCount = db.searchHistoryDao().getHistoryCount()
                 val favouriteCount = db.searchHistoryDao().getFavouriteHistoryCount()
 
@@ -99,41 +94,7 @@ object DatabaseHelper {
         }
     }
 
-    // Блокирующая версия (для использования в обычных функциях)
-    fun getDatabaseInfoSync(context: Context): String = runBlocking {
-        return@runBlocking try {
-            val databasePath = context.getDatabasePath("app_database")
-            val db = AppDatabase.getDatabase(context)
-
-            // Вызываем suspend функции с runBlocking
-            val searchHistoryCount = db.searchHistoryDao().getHistoryCount()
-            val favouriteCount = db.searchHistoryDao().getFavouriteHistoryCount()
-            val allCoordinates = db.deviceCoordinateDao().getCoordinateByMac("")
-            val coordinatesCount = allCoordinates.size
-
-            """
-                Информация о базе данных:
-                
-                Путь: ${databasePath.absolutePath}
-                Размер: ${String.format("%.2f", databasePath.length() / 1024.0)} KB
-                Существует: ${databasePath.exists()}
-                
-                Статистика:
-                • Всего записей в истории: $searchHistoryCount
-                • Избранных записей: $favouriteCount
-                • Координат устройств: $coordinatesCount
-                
-                Таблицы:
-                • search_history
-                • device_coordinates
-                • fav_items
-            """.trimIndent()
-        } catch (e: Exception) {
-            "Ошибка получения информации: ${e.message}"
-        }
-    }
-
-    // Упрощенная версия без вызовов DAO (только файловая информация)
+    // только файловая информация
     fun getDatabaseFileInfo(context: Context): String {
         return try {
             val databasePath = context.getDatabasePath("app_database")
@@ -167,7 +128,6 @@ object DatabaseHelper {
         }
     }
 
-    // Обновленные методы для DatabaseViewerActivity
     fun getDatabaseSchema(context: Context): String {
         return try {
             val databasePath = context.getDatabasePath("app_database")

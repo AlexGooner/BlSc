@@ -153,7 +153,7 @@ class OfflineMapManager(
         }
     }
 
-    private suspend fun downloadSingleTile(x: Int, y: Int, zoom: Int): Boolean {
+    private  fun downloadSingleTile(x: Int, y: Int, zoom: Int): Boolean {
         return try {
             val tileUrl = "$TILE_SERVER/$zoom/$x/$y.png"
             Log.v(TAG, "Загрузка тайла: $tileUrl")

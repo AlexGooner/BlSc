@@ -1,7 +1,6 @@
 package com.citrus.blsc.ui.settings
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button

@@ -59,7 +59,7 @@ class OfflineMapActivity : AppCompatActivity() {
         )
     }
 
-    // UI элементы
+
     private var mapView: MapView? = null
     private var btnDownloadMap: Button? = null
     private var btnDeleteMap: Button? = null
@@ -486,7 +486,6 @@ class OfflineMapActivity : AppCompatActivity() {
         // Проверка разницы уровней zoom
         val zoomDiff = maxZoom - minZoom
         if (zoomDiff > 6) {
-            // Используем CompletableFuture или другой механизм для ожидания ответа
             val confirmationFuture = CompletableFuture<Boolean>()
 
             AlertDialog.Builder(this)

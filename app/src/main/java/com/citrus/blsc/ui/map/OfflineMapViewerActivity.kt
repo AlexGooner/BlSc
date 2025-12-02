@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.citrus.blsc.R
 import com.citrus.blsc.data.database.AppDatabase
 import com.citrus.blsc.data.database.DeviceCoordinate
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -74,6 +75,7 @@ class OfflineMapViewerActivity : AppCompatActivity() {
         centerMapOnMoscow()
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun loadAndDisplayCoordinates() {
         if (macAddress.isNullOrEmpty()) {
             showNoCoordinatesMessage("MAC-адрес не указан")
@@ -153,7 +155,7 @@ class OfflineMapViewerActivity : AppCompatActivity() {
 
         val geoPoint = GeoPoint(firstCoordinate.latitude, firstCoordinate.longitude)
         mapView?.controller?.setCenter(geoPoint)
-        mapView?.controller?.setZoom(15.0) // Уровень приближения как в оригинальном коде
+        mapView?.controller?.setZoom(15.0)
 
         Log.d(
             TAG,
