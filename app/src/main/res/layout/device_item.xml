@@ -34,5 +34,19 @@
         android:textSize="14sp"
         android:padding="5dp"/>
 
+    <TextView
+        android:id="@+id/type_text_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:padding="5dp"/>
+
+    <TextView
+        android:id="@+id/week_count_text_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:padding="5dp"/>
+
 
 </LinearLayout>

@@ -12,6 +12,7 @@ data class SearchHistoryItem(
     val id: Long = 0,
     val deviceName: String,
     val macAddress: String,
+    val deviceType: String = "Неизвестное устройство",
     val rssi: String,
     val latitude: Double?,
     val longitude: Double?,
@@ -23,6 +24,7 @@ data class SearchHistoryItem(
         parcel.readLong(),
         parcel.readString()!!,
         parcel.readString()!!,
+        parcel.readString() ?: "Неизвестное устройство",
         parcel.readString()!!,
         parcel.readValue(Double::class.java.classLoader) as? Double,
         parcel.readValue(Double::class.java.classLoader) as? Double,
@@ -34,6 +36,7 @@ data class SearchHistoryItem(
         parcel.writeLong(id)
         parcel.writeString(deviceName)
         parcel.writeString(macAddress)
+        parcel.writeString(deviceType)
         parcel.writeString(rssi)
         parcel.writeValue(latitude)
         parcel.writeValue(longitude)

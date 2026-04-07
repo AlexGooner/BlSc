@@ -4,5 +4,6 @@ import android.bluetooth.BluetoothDevice
 
 data class BluetoothDeviceInfo(
     val device: BluetoothDevice,
-    val rssi: Short
+    val rssi: Short,
+    val detectionsLast7Days: Int = 0
 )

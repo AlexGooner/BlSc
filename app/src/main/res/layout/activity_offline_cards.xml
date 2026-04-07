@@ -21,13 +21,14 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:layout_gravity="center_horizontal"
+            android:orientation="vertical">
 
             <Button
                 android:id="@+id/btnDownloadMap"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="6dp"
+                android:layout_gravity="center_horizontal"
                 android:backgroundTint="@color/pink"
                 android:text="Скачать"
                 android:textColor="@color/white"
@@ -35,28 +36,45 @@
 
             <Button
                 android:id="@+id/btnDeleteMap"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
                 android:backgroundTint="@color/black"
                 android:text="@string/delete_offline_map"
                 android:textColor="@color/white"
                 android:textSize="14sp" />
-        </LinearLayout>
-
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btnViewOfflineMap"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
                 android:onClick="onViewOfflineMapClick"
                 android:text="Просмотреть карту" />
+
+            <Button
+                android:id="@+id/btnExportMap"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="Информация о картах"
+                />
+
+            <Button
+                android:id="@+id/btnExportMaps"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Экспорт карт в ZIP"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:id="@+id/btnImportMap"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Импорт карт"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_marginBottom="8dp" />
+
         </LinearLayout>
 
         <TextView

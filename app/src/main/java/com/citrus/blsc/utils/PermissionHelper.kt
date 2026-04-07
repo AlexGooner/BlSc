@@ -70,7 +70,7 @@ object PermissionHelper {
     fun areAllRequirementsMet(context: Context): Boolean {
         return areBluetoothPermissionsGranted(context) &&
                 isBluetoothEnabled() &&
-                isLocationEnabled(context)
+                isLocationEnabled(context) &&
                 isNotificationPermissionGranted(context)
     }
 

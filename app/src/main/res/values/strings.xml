@@ -46,4 +46,9 @@
     <string name="map_download_progress">Загрузка карты: %d%%</string>
     <string name="download_complete">Загрузка завершена!</string>
     <string name="download_error">Ошибка загрузки</string>
+    <string name="security_block_title">Доступ ограничен</string>
+    <string name="security_block_root">Обнаружено небезопасное окружение (root). Запуск приложения заблокирован.</string>
+    <string name="security_block_debug">Обнаружен режим отладки. Запуск приложения заблокирован.</string>
+    <string name="security_block_device_mismatch">Это приложение привязано к другому устройству и не может быть запущено здесь.</string>
+    <string name="close_app">Закрыть</string>
 </resources>

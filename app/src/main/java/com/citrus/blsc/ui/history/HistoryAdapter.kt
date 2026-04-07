@@ -40,6 +40,7 @@ class HistoryAdapter(
         holder.deviceNameTextView.text =
             historyItem.deviceName.ifEmpty { context.getString(R.string.unknown_device) }
         holder.macAddressTextView.text = historyItem.macAddress
+        holder.deviceTypeTextView.text = historyItem.deviceType
         holder.rssiTextView.text = "${historyItem.rssi} dBm"
         holder.timestampTextView.text = historyItem.getFormattedDate()
 
@@ -74,6 +75,7 @@ class HistoryAdapter(
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val deviceNameTextView: TextView = itemView.findViewById(R.id.device_name_text_view)
         val macAddressTextView: TextView = itemView.findViewById(R.id.mac_address_text_view)
+        val deviceTypeTextView: TextView = itemView.findViewById(R.id.device_type_text_view)
         val rssiTextView: TextView = itemView.findViewById(R.id.rssi_text_view)
         val locationTextView: TextView = itemView.findViewById(R.id.location_text_view)
         val timestampTextView: TextView = itemView.findViewById(R.id.timestamp_text_view)

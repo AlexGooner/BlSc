@@ -1,9 +1,12 @@
 package com.citrus.blsc.ui.map
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -16,6 +19,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.citrus.blsc.R
 import com.google.android.material.textfield.TextInputEditText
 import org.osmdroid.config.Configuration
@@ -31,9 +35,16 @@ import org.osmdroid.views.overlay.compass.InternalCompassOrientationProvider
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.text.DecimalFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class OfflineMapActivity : AppCompatActivity() {
 
@@ -50,13 +61,9 @@ class OfflineMapActivity : AppCompatActivity() {
         private const val DEFAULT_WEST = 37.3686
         private const val DEFAULT_MIN_ZOOM = 10
         private const val DEFAULT_MAX_ZOOM = 16
-        // Bounding box Москвы
-        private val MOSCOW_BOUNDING_BOX = OfflineMapManager.BoundingBox(
-            north = 55.9111,
-            south = 55.5690,
-            east = 37.8553,
-            west = 37.3686
-        )
+        private const val REQUEST_WRITE_STORAGE_PERMISSION = 1004
+        private const val REQUEST_IMPORT_ZIP = 1002
+        private const val REQUEST_IMPORT_DIRECTORY = 1003
     }
 
 
@@ -66,9 +73,12 @@ class OfflineMapActivity : AppCompatActivity() {
     private var btnViewOfflineMap: Button? = null
     private var btnTestCoordinates: Button? = null
     private var btnZoomInfo: Button? = null
+    private var btnExportMap: Button? = null
     private var layoutProgress: LinearLayout? = null
     private var progressBar: ProgressBar? = null
     private var tvProgress: TextView? = null
+    private var btnExportMaps: Button? = null
+    private var btnImportMap: Button? = null
 
     private var editNorth: TextInputEditText? = null
     private var editSouth: TextInputEditText? = null
@@ -159,7 +169,9 @@ class OfflineMapActivity : AppCompatActivity() {
             layoutProgress = findViewById(R.id.layoutProgress)
             progressBar = findViewById(R.id.progressBar)
             tvProgress = findViewById(R.id.tvProgress)
-
+            btnExportMap = findViewById(R.id.btnExportMap)
+            btnExportMaps = findViewById(R.id.btnExportMaps)
+            btnImportMap = findViewById(R.id.btnImportMap)
             // Поля ввода
             editNorth = findViewById(R.id.editNorth)
             editSouth = findViewById(R.id.editSouth)
@@ -194,6 +206,20 @@ class OfflineMapActivity : AppCompatActivity() {
                 showZoomInfoDialog()
             }
 
+            btnExportMap?.setOnClickListener {
+                showMapInfo()
+            }
+
+            btnExportMaps?.setOnClickListener {
+                Log.d(TAG, "Кнопка экспорта карт нажата!")
+                exportMapsImproved()
+            }
+
+            btnImportMap?.setOnClickListener {
+                Log.d(TAG, "Кнопка import нажата!")
+                showImportOptions()
+            }
+
             // Скрываем прогресс по умолчанию
             layoutProgress?.visibility = LinearLayout.GONE
 
@@ -202,6 +228,268 @@ class OfflineMapActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Ошибка инициализации UI", e)
             Toast.makeText(this, "Ошибка инициализации интерфейса", Toast.LENGTH_LONG).show()
+        }
+    }
+
+
+    private fun showImportOptions() {
+        val options = arrayOf("Из ZIP архива", "Из директории", "Отмена")
+
+        AlertDialog.Builder(this)
+            .setTitle("Импорт карт")
+            .setItems(options) { dialog, which ->
+                when (which) {
+                    0 -> importFromZip()
+                    1 -> importFromDirectory()
+                    2 -> dialog.dismiss()
+                }
+            }
+            .setNegativeButton("Отмена") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    // Импорт из ZIP архива
+    private fun importFromZip() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "application/zip"
+            addCategory(Intent.CATEGORY_OPENABLE)
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed"))
+        }
+
+        try {
+            startActivityForResult(
+                Intent.createChooser(intent, "Выберите ZIP архив с картами"),
+                REQUEST_IMPORT_ZIP
+            )
+        } catch (ex: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, "Установите файловый менеджер", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Импорт из директории
+    @SuppressLint("ObsoleteSdkInt")
+    private fun importFromDirectory() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            }
+
+            try {
+                startActivityForResult(
+                    Intent.createChooser(intent, "Выберите папку с картами"),
+                    REQUEST_IMPORT_DIRECTORY
+                )
+            } catch (ex: android.content.ActivityNotFoundException) {
+                Toast.makeText(this, "Установите файловый менеджер", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "Импорт из директории доступен с Android 5.0+", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        when (requestCode) {
+            REQUEST_IMPORT_ZIP -> {
+                if (resultCode == RESULT_OK && data != null) {
+                    data.data?.let { uri ->
+                        importZipFile(uri)
+                    }
+                }
+            }
+
+            REQUEST_IMPORT_DIRECTORY -> {
+                if (resultCode == RESULT_OK && data != null) {
+                    data.data?.let { uri ->
+                        importFromDirectoryUri(uri)
+                    }
+                }
+            }
+
+            // ... остальные requestCode
+        }
+    }
+
+    // Импорт ZIP файла
+    private fun importZipFile(uri: android.net.Uri) {
+        layoutProgress?.visibility = LinearLayout.VISIBLE
+        btnImportMap?.isEnabled = false
+        btnDownloadMap?.isEnabled = false
+        progressBar?.progress = 0
+        tvProgress?.text = "Подготовка к импорту..."
+
+        Thread {
+            try {
+                // Копируем файл во временную директорию
+                val tempDir = File(cacheDir, "import_temp")
+                if (tempDir.exists()) {
+                    tempDir.deleteRecursively()
+                }
+                tempDir.mkdirs()
+
+                val zipFile = File(tempDir, "imported_maps.zip")
+
+                contentResolver.openInputStream(uri)?.use { inputStream ->
+                    zipFile.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+
+                runOnUiThread {
+                    startImportProcess(zipFile, true)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка копирования ZIP файла", e)
+                runOnUiThread {
+                    layoutProgress?.visibility = LinearLayout.GONE
+                    btnImportMap?.isEnabled = true
+                    btnDownloadMap?.isEnabled = true
+                    Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    // Импорт из директории (URI)
+    @SuppressLint("NewApi")
+    private fun importFromDirectoryUri(treeUri: android.net.Uri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            layoutProgress?.visibility = LinearLayout.VISIBLE
+            btnImportMap?.isEnabled = false
+            btnDownloadMap?.isEnabled = false
+            progressBar?.progress = 0
+            tvProgress?.text = "Подготовка к импорту..."
+
+            // Для Android 10+ используем DocumentFile
+            val documentFile = androidx.documentfile.provider.DocumentFile.fromTreeUri(this, treeUri)
+
+            if (documentFile != null && documentFile.isDirectory) {
+                startImportFromDocument(documentFile)
+            } else {
+                layoutProgress?.visibility = LinearLayout.GONE
+                btnImportMap?.isEnabled = true
+                btnDownloadMap?.isEnabled = true
+                Toast.makeText(this, "Выберите директорию", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Запуск процесса импорта
+    private fun startImportProcess(file: File, isZip: Boolean) {
+        val manager = offlineMapManager ?: return
+
+        val callback = object : OfflineMapManager.ImportCallback {
+            override fun onProgress(progress: Int, message: String) {
+                runOnUiThread {
+                    progressBar?.progress = progress
+                    tvProgress?.text = message
+                }
+            }
+
+            override fun onComplete(importedCount: Int, totalCount: Int) {
+                runOnUiThread {
+                    progressBar?.progress = 100
+                    tvProgress?.text = "Импорт завершен! Импортировано: $importedCount/$totalCount"
+
+                    btnImportMap?.isEnabled = true
+                    btnDownloadMap?.isEnabled = true
+
+                    // Скрываем прогресс через 3 секунды
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        layoutProgress?.visibility = LinearLayout.GONE
+                    }, 3000)
+
+                    // Проверяем существующие карты
+                    checkExistingOfflineMaps()
+
+                    Toast.makeText(
+                        this@OfflineMapActivity,
+                        "Карты успешно импортированы!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+
+            override fun onError(error: String) {
+                runOnUiThread {
+                    tvProgress?.text = "Ошибка: $error"
+                    btnImportMap?.isEnabled = true
+                    btnDownloadMap?.isEnabled = true
+                    layoutProgress?.visibility = LinearLayout.GONE
+                    Toast.makeText(
+                        this@OfflineMapActivity,
+                        "Ошибка импорта: $error",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
+        if (isZip) {
+            manager.importFromZip(file, callback)
+        } else {
+            manager.importFromDirectory(file, callback)
+        }
+    }
+
+    // Импорт из DocumentFile (для Android 10+)
+    @SuppressLint("NewApi")
+    private fun startImportFromDocument(documentDir: androidx.documentfile.provider.DocumentFile) {
+        Thread {
+            try {
+                // Создаем временную директорию для копирования
+                val tempDir = File(cacheDir, "import_doc_temp")
+                if (tempDir.exists()) {
+                    tempDir.deleteRecursively()
+                }
+                tempDir.mkdirs()
+
+                // Рекурсивное копирование файлов
+                copyDocumentFiles(documentDir, tempDir, "")
+
+                runOnUiThread {
+                    startImportProcess(tempDir, false)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка копирования из DocumentFile", e)
+                runOnUiThread {
+                    layoutProgress?.visibility = LinearLayout.GONE
+                    btnImportMap?.isEnabled = true
+                    btnDownloadMap?.isEnabled = true
+                    Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    // Рекурсивное копирование файлов из DocumentFile
+    @SuppressLint("NewApi")
+    private fun copyDocumentFiles(
+        source: androidx.documentfile.provider.DocumentFile,
+        targetDir: File,
+        path: String
+    ) {
+        for (file in source.listFiles()) {
+            val newPath = if (path.isEmpty()) file.name!! else "$path/${file.name}"
+
+            if (file.isDirectory) {
+                val newTargetDir = File(targetDir, newPath)
+                newTargetDir.mkdirs()
+                copyDocumentFiles(file, targetDir, newPath)
+            } else if (file.isFile && file.name?.endsWith(".png") == true) {
+                val targetFile = File(targetDir, newPath)
+                targetFile.parentFile?.mkdirs()
+
+                contentResolver.openInputStream(file.uri)?.use { inputStream ->
+                    targetFile.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+            }
         }
     }
 
@@ -279,6 +567,270 @@ class OfflineMapActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Ошибка добавления маркера", e)
         }
+    }
+
+    @SuppressLint("DefaultLocale")
+    private fun showMapInfo() {
+        val manager = offlineMapManager ?: return
+
+        val tilesDir = File(filesDir, "offline_tiles")
+        if (!tilesDir.exists() || !tilesDir.isDirectory) {
+            Toast.makeText(this, "Оффлайн карты не загружены", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val zoomLevels = manager.getAvailableZoomLevels()
+        val totalSize = calculateDirectorySize(tilesDir)
+        val sizeMB = totalSize.toDouble() / (1024.0 * 1024.0) // Конвертируем в Double
+
+        val message = """
+        Информация об оффлайн картах:
+        
+        Путь: ${tilesDir.absolutePath}
+        Доступные уровни zoom: ${zoomLevels.joinToString()}
+        Размер: ${String.format("%.2f", sizeMB)} MB
+        Количество файлов: ${countFiles(tilesDir)}
+        
+        Уровень детализации:
+        ${getZoomLevelsDescription(zoomLevels)}
+    """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("Информация о картах")
+            .setMessage(message)
+            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun collectPngFiles(directory: File, fileList: MutableList<File>) {
+        if (directory.isDirectory) {
+            directory.listFiles()?.forEach { file ->
+                if (file.isDirectory) {
+                    collectPngFiles(file, fileList)
+                } else if (file.isFile && file.name.endsWith(".png", ignoreCase = true)) {
+                    fileList.add(file)
+                }
+            }
+        }
+    }
+    /**
+     * Делится ZIP файлом через Intent
+     */
+    private fun shareZipFile(zipFile: File) {
+        try {
+            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.fileprovider",
+                    zipFile
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                android.net.Uri.fromFile(zipFile)
+            }
+
+            val shareIntent = Intent().apply {
+                action = Intent.ACTION_SEND
+                type = "application/zip"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Оффлайн карты Bluetooth Scanner")
+                putExtra(Intent.EXTRA_TEXT, "Оффлайн карты из приложения Bluetooth Scanner")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            startActivity(Intent.createChooser(shareIntent, "Поделиться картами"))
+
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Форматирует размер файла
+     */
+    private fun formatFileSize(size: Long): String {
+        return if (size <= 0) "0 B" else when {
+            size >= 1024L * 1024 * 1024 -> String.format("%.2f GB", size.toDouble() / (1024 * 1024 * 1024))
+            size >= 1024L * 1024 -> String.format("%.2f MB", size.toDouble() / (1024 * 1024))
+            size >= 1024L -> String.format("%.2f KB", size.toDouble() / 1024)
+            else -> "$size B"
+        }
+    }
+
+    private fun calculateDirectorySize(directory: File): Long {
+        var size = 0L
+        if (directory.isDirectory) {
+            directory.listFiles()?.forEach { file ->
+                size += if (file.isDirectory) {
+                    calculateDirectorySize(file)
+                } else {
+                    file.length()
+                }
+            }
+        }
+        return size
+    }
+
+    private fun countFiles(directory: File): Int {
+        var count = 0
+        if (directory.isDirectory) {
+            directory.listFiles()?.forEach { file ->
+                count += if (file.isDirectory) {
+                    countFiles(file)
+                } else {
+                    1
+                }
+            }
+        }
+        return count
+    }
+
+    private fun getZoomLevelsDescription(zoomLevels: List<Int>): String {
+        return zoomLevels.sorted().joinToString("\n") { zoom ->
+            val levelDir = File(File(filesDir, "offline_tiles"), zoom.toString())
+            val filesCount = countFiles(levelDir)
+            "• Zoom $zoom: $filesCount тайлов"
+        }
+    }
+
+
+    private fun exportMapsImproved() {
+        val manager = offlineMapManager ?: return
+
+        layoutProgress?.visibility = LinearLayout.VISIBLE
+        btnExportMaps?.isEnabled = false
+        progressBar?.progress = 0
+        tvProgress?.text = "Подготовка к экспорту..."
+
+        manager.exportToZip(object : OfflineMapManager.ExportCallback {
+            override fun onProgress(progress: Int, message: String) {
+                runOnUiThread {
+                    progressBar?.progress = progress
+                    tvProgress?.text = message
+                }
+            }
+
+            override fun onComplete(zipFile: File, fileCount: Int) {
+                runOnUiThread {
+                    progressBar?.progress = 100
+                    tvProgress?.text = "Экспорт завершен! Файлов: $fileCount"
+
+                    btnExportMaps?.isEnabled = true
+
+                    // Скрываем прогресс через 3 секунды
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        layoutProgress?.visibility = LinearLayout.GONE
+                    }, 3000)
+
+                    // Показываем результат
+                    showExportSuccessDialog(zipFile, fileCount)
+                }
+            }
+
+            override fun onError(error: String) {
+                runOnUiThread {
+                    layoutProgress?.visibility = LinearLayout.GONE
+                    btnExportMaps?.isEnabled = true
+                    tvProgress?.text = "Ошибка: $error"
+                    Toast.makeText(this@OfflineMapActivity, "Ошибка: $error", Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+    }
+
+    private fun showExportSuccessDialog(zipFile: File, fileCount: Int) {
+        val fileSize = formatFileSize(zipFile.length())
+
+        val message = """
+        Экспорт успешно завершен!
+        
+        Файлов экспортировано: $fileCount
+        Размер архива: $fileSize
+        Путь: ${zipFile.parent}
+        Имя файла: ${zipFile.name}
+        
+        Архив содержит папку 'offline_tiles/' с картами.
+        Для импорта выберите этот ZIP файл.
+    """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("Экспорт завершен")
+            .setMessage(message)
+            .setPositiveButton("Поделиться") { dialog, _ ->
+                dialog.dismiss()
+                shareZipFile(zipFile)
+            }
+            .setNeutralButton("Импортировать сейчас") { dialog, _ ->
+                dialog.dismiss()
+                // Автоматически запускаем импорт этого файла
+                importSpecificZipFile(zipFile)
+            }
+            .setNegativeButton("OK") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun importSpecificZipFile(zipFile: File) {
+        layoutProgress?.visibility = LinearLayout.VISIBLE
+        btnImportMap?.isEnabled = false
+        progressBar?.progress = 0
+        tvProgress?.text = "Начало импорта из ${zipFile.name}"
+
+        Thread {
+            try {
+                val manager = offlineMapManager ?: return@Thread
+
+                val callback = object : OfflineMapManager.ImportCallback {
+                    override fun onProgress(progress: Int, message: String) {
+                        runOnUiThread {
+                            progressBar?.progress = progress
+                            tvProgress?.text = message
+                        }
+                    }
+
+                    override fun onComplete(importedCount: Int, totalCount: Int) {
+                        runOnUiThread {
+                            progressBar?.progress = 100
+                            tvProgress?.text = "Импорт завершен! $importedCount/$totalCount файлов"
+
+                            btnImportMap?.isEnabled = true
+
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                layoutProgress?.visibility = LinearLayout.GONE
+                            }, 3000)
+
+                            // Обновляем состояние кнопок
+                            checkExistingOfflineMaps()
+
+                            Toast.makeText(
+                                this@OfflineMapActivity,
+                                "Карты успешно импортированы!",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+
+                    override fun onError(error: String) {
+                        runOnUiThread {
+                            layoutProgress?.visibility = LinearLayout.GONE
+                            btnImportMap?.isEnabled = true
+                            tvProgress?.text = "Ошибка: $error"
+                            Toast.makeText(this@OfflineMapActivity, "Ошибка: $error", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+
+                manager.importFromZip(zipFile, callback)
+
+            } catch (e: Exception) {
+                runOnUiThread {
+                    layoutProgress?.visibility = LinearLayout.GONE
+                    btnImportMap?.isEnabled = true
+                    Toast.makeText(this@OfflineMapActivity, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     private fun enableLocationOverlay() {
@@ -729,4 +1281,6 @@ class OfflineMapActivity : AppCompatActivity() {
         compassOverlay?.disableCompass()
         Log.d(TAG, "onDestroy")
     }
+
+
 }

@@ -3,6 +3,7 @@ package com.citrus.blsc.ui.main
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -30,6 +31,7 @@ import com.citrus.blsc.data.database.DeviceCoordinate
 import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import com.citrus.blsc.databinding.ActivityMainBinding
 import com.citrus.blsc.ui.fav.FavActivity
+import com.citrus.blsc.utils.AppSecurityManager
 import com.citrus.blsc.ui.history.HistoryActivity
 import com.citrus.blsc.ui.settings.SettingsActivity
 import com.citrus.blsc.utils.AnimationHelper
@@ -53,8 +55,10 @@ import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.SettingsClient
 import com.google.android.gms.common.api.ResolvableApiException
 import android.content.IntentSender
+import android.os.Handler
 import android.os.Looper
 import androidx.annotation.RequiresPermission
+import com.citrus.blsc.R
 import com.citrus.blsc.utils.NotificationHelper
 import com.citrus.blsc.utils.PermissionHelper
 import com.google.android.gms.location.Priority
@@ -69,7 +73,6 @@ class MainActivity() : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
     private lateinit var adapter: MainAdapter
     private var devices = mutableListOf<BluetoothDeviceInfo>()
-    private var job: Job? = null
     private var favouriteMacs: List<String> = emptyList()
     private var favouriteVibrations: Map<String, String> = emptyMap()
     private lateinit var db: AppDatabase
@@ -125,6 +128,11 @@ class MainActivity() : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemeHelper.applyTheme(this)
         super.onCreate(savedInstanceState)
+
+        if (!runSecurityChecks()) {
+            return
+        }
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -160,8 +168,8 @@ class MainActivity() : AppCompatActivity() {
         binding.stopBtn.setOnClickListener {
             UIAnimationHelper.animateButtonPress(binding.stopBtn)
             releaseWakeLock()
-            job?.cancel()
-            job = null
+            scanningJob?.cancel()
+            scanningJob = null
             viewModel.stopScanning(this)
             viewModel.stopTimer()
             stopScanningProcess()
@@ -208,42 +216,57 @@ class MainActivity() : AppCompatActivity() {
                         it.device.address + "\n" + binding.locationTextView.text + "\n"
                     )
 
-                    db = AppDatabase.getDatabase(this)
-                    val textFromMaps = binding.mapsTextView.text.toString()
-                    val lines = textFromMaps.split("\n")
-                    lifecycleScope.launch {
-                        for (i in lines.indices step 2) {
-                            if (i + 1 < lines.size) {
-                                val mac = lines[i].trim()
-                                val coordinates = lines[i + 1].trim().split(" ")
-                                if (coordinates.size == 2) {
-                                    val latitudeStr = coordinates[0].trim()
-                                    val longitudeStr =
-                                        coordinates[1].trim()
-                                    val latitude = latitudeStr.toDoubleOrNull()
-                                    val longitude = longitudeStr.toDoubleOrNull()
-                                    if (latitude != null && longitude != null) {
-                                        val deviceCoordinate = DeviceCoordinate(
-                                            0,
-                                            mac,
-                                            latitude,
-                                            longitude,
-                                            viewModel.getCurrentTime()
-                                        )
-                                        db.deviceCoordinateDao().insert(deviceCoordinate)
-                                    } else {
-                                        Log.e(
-                                            "MainActivity",
-                                            "Invalid coordinates: $latitudeStr, $longitudeStr"
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    persistCurrentDeviceCoordinate(
+                        mac = it.device.address,
+                        locationText = binding.locationTextView.text.toString()
+                    )
                 }
             }
         }
+    }
+
+    private fun persistCurrentDeviceCoordinate(mac: String, locationText: String) {
+        db = AppDatabase.getDatabase(this)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val coordinates = locationText.trim().split(" ")
+            if (coordinates.size != 2) return@launch
+
+            val latitude = coordinates[0].trim().toDoubleOrNull()
+            val longitude = coordinates[1].trim().toDoubleOrNull()
+            if (latitude == null || longitude == null) {
+                Log.e("MainActivity", "Invalid coordinates: ${coordinates.joinToString(" ")}")
+                return@launch
+            }
+
+            val deviceCoordinate = DeviceCoordinate(
+                0,
+                mac,
+                latitude,
+                longitude,
+                viewModel.getCurrentTime()
+            )
+            db.deviceCoordinateDao().insert(deviceCoordinate)
+        }
+    }
+
+    private fun runSecurityChecks(): Boolean {
+        return if (!AppSecurityManager.verifyOrBindDevice(this)) {
+            showSecurityBlockDialog(getString(R.string.security_block_device_mismatch))
+            false
+        } else {
+            true
+        }
+    }
+
+    private fun showSecurityBlockDialog(message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.security_block_title))
+            .setMessage(message)
+            .setCancelable(false)
+            .setPositiveButton(getString(R.string.close_app)) { _, _ ->
+                finishAffinity()
+            }
+            .show()
     }
 
     private fun acquireWakeLock() {
@@ -294,7 +317,33 @@ class MainActivity() : AppCompatActivity() {
                     Log.d("MainActivity", "Cleared previous cycle data")
                 }
 
-                // 2. Получаем координаты
+                // 2. Сразу запускаем сканирование Bluetooth без ожидания GPS
+                if (areAllPermissionsGranted()) {
+                    try {
+                        withContext(Dispatchers.Main) {
+                            viewModel.startScanning(
+                                this@MainActivity,
+                                binding.mainTextView.text.toString(),
+                                binding.mapsTextView.text.toString(),
+                                binding.mainTextView,
+                                binding.mapsTextView
+                            )
+                        }
+                    } catch (securityException: SecurityException) {
+                        Log.e(
+                            "MainActivity",
+                            "Security exception in startScanning: ${securityException.message}"
+                        )
+                        withContext(Dispatchers.Main) {
+                            handlePermissionError("Cannot start scanning - permissions required")
+                        }
+                        break
+                    }
+                } else {
+                    break
+                }
+
+                // 3. Получаем координаты (сканирование уже идет)
                 try {
                     val currentCoordinates = withContext(Dispatchers.IO) {
                         getCurrentCoordinatesSync()
@@ -327,32 +376,6 @@ class MainActivity() : AppCompatActivity() {
                             )
                             updateLocationText(currentCoordinates.first, currentCoordinates.second)
                         }
-                    }
-
-                    // 3. Запускаем сканирование Bluetooth
-                    if (areAllPermissionsGranted()) {
-                        try {
-                            withContext(Dispatchers.Main) {
-                                viewModel.startScanning(
-                                    this@MainActivity,
-                                    binding.mainTextView.text.toString(),
-                                    binding.mapsTextView.text.toString(),
-                                    binding.mainTextView,
-                                    binding.mapsTextView
-                                )
-                            }
-                        } catch (securityException: SecurityException) {
-                            Log.e(
-                                "MainActivity",
-                                "Security exception in startScanning: ${securityException.message}"
-                            )
-                            withContext(Dispatchers.Main) {
-                                handlePermissionError("Cannot start scanning - permissions required")
-                            }
-                            break
-                        }
-                    } else {
-                        break
                     }
 
                     // 4. Ждем 15 секунд сканирования
@@ -391,6 +414,36 @@ class MainActivity() : AppCompatActivity() {
         binding.startBtn.isEnabled = false
         binding.stopBtn.isEnabled = true
         Toast.makeText(this, "Scanning started", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startBackgroundScanningService() {
+        val intent = Intent(this, BluetoothScanningService::class.java).apply {
+            action = BluetoothScanningService.ACTION_START
+            putStringArrayListExtra(
+                BluetoothScanningService.EXTRA_FAVOURITE_MACS,
+                ArrayList(favouriteMacs)
+            )
+            putExtra(
+                BluetoothScanningService.EXTRA_FAVOURITE_VIBRATIONS,
+                HashMap(favouriteVibrations)
+            )
+        }
+        try {
+            ContextCompat.startForegroundService(this, intent)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to start background service: ${e.message}", e)
+        }
+    }
+
+    private fun stopBackgroundScanningService() {
+        val intent = Intent(this, BluetoothScanningService::class.java).apply {
+            action = BluetoothScanningService.ACTION_STOP
+        }
+        try {
+            startService(intent)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to stop background service: ${e.message}", e)
+        }
     }
 
     private fun checkAndRequestRequirements(): Boolean {
@@ -586,6 +639,7 @@ class MainActivity() : AppCompatActivity() {
         isScanning = false
         scanningJob?.cancel()
         scanningJob = null
+        stopBackgroundScanningService()
 
         viewModel.stopScanning(this)
         viewModel.stopTimer()
@@ -598,9 +652,8 @@ class MainActivity() : AppCompatActivity() {
         binding.startBtn.isEnabled = true
         binding.stopBtn.isEnabled = false
 
-        // Очищаем все данные включая счетчики при полной остановке
-        viewModel.clearAllData()
-        clearUI()
+        // При остановке сохраняем список найденных устройств на экране.
+        // Очистка выполняется при следующем запуске (в начале цикла start).
 
         Toast.makeText(this, "Сканирование остановлено", Toast.LENGTH_SHORT).show()
     }
@@ -762,16 +815,15 @@ class MainActivity() : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (job != null && !isLocationEnabled()) {
-
-            job?.cancel()
-            job = null
+        if (scanningJob != null && !isLocationEnabled()) {
+            scanningJob?.cancel()
+            scanningJob = null
             viewModel.stopScanning(this)
             viewModel.stopTimer()
             binding.lottieAnimation.isVisible = false
             Toast.makeText(this, "Scanning paused - location disabled", Toast.LENGTH_SHORT).show()
         }
-        if (job != null && wakeLock == null) {
+        if (scanningJob != null && wakeLock == null) {
             acquireWakeLock()
         }
     }
@@ -784,10 +836,43 @@ class MainActivity() : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        stopScanningProcess()
-        unregisterStateReceivers()
-        removeLocationUpdates()
+        if (isFinishing) {
+            stopScanningProcess()
+            unregisterStateReceivers()
+            removeLocationUpdates()
+        }
         super.onDestroy()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (isScanning) {
+            pauseForegroundScanningForBackground()
+            startBackgroundScanningService()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (isScanning) {
+            stopBackgroundScanningService()
+            if (scanningJob == null) {
+                resumeForegroundScanningFromBackground()
+            }
+        }
+    }
+
+    private fun pauseForegroundScanningForBackground() {
+        scanningJob?.cancel()
+        scanningJob = null
+        viewModel.stopScanning(this)
+        viewModel.stopTimer()
+        unregisterStateReceivers()
+        releaseWakeLock()
+    }
+
+    private fun resumeForegroundScanningFromBackground() {
+        startScanningProcess()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

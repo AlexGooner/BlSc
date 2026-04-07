@@ -77,5 +77,6 @@ dependencies {
     implementation("org.mapsforge:mapsforge-themes:0.18.0")
 
     implementation("org.apache.commons:commons-compress:1.28.0")
+    implementation("androidx.security:security-crypto:1.1.0")
 
 }

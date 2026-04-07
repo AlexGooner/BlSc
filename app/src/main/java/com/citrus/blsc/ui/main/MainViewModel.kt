@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -33,7 +34,9 @@ import com.citrus.blsc.utils.VibrationHelper
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 
@@ -41,6 +44,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val PROXIMITY_THRESHOLD = 10
+        private const val SEVEN_DAYS_IN_MS = 7L * 24L * 60L * 60L * 1000L
     }
 
     private val _devices = MutableLiveData<List<BluetoothDeviceInfo>>()
@@ -74,6 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         textViewTwo: TextView? = null
     ) {
         scanning = true
+        textFileHelper = TextFileHelper(context)
 
         _devices.value = discoveredDevices.toList()
 
@@ -86,10 +91,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         context.registerReceiver(receiver, filter)
         bluetoothAdapter?.startDiscovery()
 
-        // Опционально: работа с текстовыми файлами
+        // Опционально: очистка UI-текстов (к записи в cache это не относится)
         if (text != null && textView != null && textViewTwo != null) {
-            textFileHelper = TextFileHelper(context)
-            textFileHelper.writeToFile(text)
             clear(textView)
             clear(textViewTwo)
         }
@@ -183,6 +186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val device = deviceInfo.device
                 val deviceName = device.name ?: "Unknown Device"
                 val macAddress = device.address
+                val deviceType = getDeviceCategory(device)
                 val rssi = deviceInfo.rssi.toString()
                 val timestamp = System.currentTimeMillis()
 
@@ -210,6 +214,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val historyItem = SearchHistoryItem(
                     deviceName = deviceName,
                     macAddress = macAddress,
+                    deviceType = deviceType,
                     rssi = rssi,
                     latitude = latitude,
                     longitude = longitude,
@@ -230,6 +235,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             } catch (e: Exception) {
                 Log.e("SearchHistory", "Error creating history item: ${e.message}")
+            }
+        }
+    }
+
+    private fun updateDetectionsLast7Days(macAddress: String) {
+        viewModelScope.launch {
+            val fromTimestamp = System.currentTimeMillis() - SEVEN_DAYS_IN_MS
+            val countLast7Days = withContext(Dispatchers.IO) {
+                database.searchHistoryDao().getDetectionCountForMacSince(macAddress, fromTimestamp)
+            } + 1 // include current discovery before insert completes
+
+            val deviceIndex = discoveredDevices.indexOfFirst { it.device.address == macAddress }
+            if (deviceIndex != -1) {
+                discoveredDevices[deviceIndex] =
+                    discoveredDevices[deviceIndex].copy(detectionsLast7Days = countLast7Days)
+                _devices.value = discoveredDevices.toList()
             }
         }
     }
@@ -269,7 +290,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                         if (context != null) {
                             saveToSearchHistory(deviceInfo, context)
+                            writeDiscoveredDeviceToCache(context, deviceInfo)
                         }
+                        updateDetectionsLast7Days(macAddress)
 
                         // Обновляем счетчик
                         val currentCount = counterList.getOrDefault(macAddress, 0)
@@ -327,5 +350,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     @SuppressLint("MissingPermission")
     fun stopDiscovery() {
         bluetoothAdapter?.cancelDiscovery()
+    }
+
+    private fun writeDiscoveredDeviceToCache(context: Context, deviceInfo: BluetoothDeviceInfo) {
+        if (!::textFileHelper.isInitialized) {
+            textFileHelper = TextFileHelper(context)
+        }
+
+        val device = deviceInfo.device
+        val name = device.name ?: "unnamed"
+        val latitude = currentLatitude?.toString() ?: "N/A"
+        val longitude = currentLongitude?.toString() ?: "N/A"
+        val record =
+            "${getCurrentTime()} | name=$name | mac=${device.address} | rssi=${deviceInfo.rssi} | lat=$latitude | lon=$longitude"
+        textFileHelper.writeToFile(record)
+    }
+
+    private fun getDeviceCategory(device: BluetoothDevice): String {
+        val bluetoothClass = device.bluetoothClass
+        val name = (device.name ?: "").lowercase()
+
+        if (bluetoothClass != null) {
+            when (bluetoothClass.majorDeviceClass) {
+                BluetoothClass.Device.Major.PHONE -> return "Телефон"
+                BluetoothClass.Device.Major.WEARABLE -> return "Часы/носимое"
+                BluetoothClass.Device.Major.COMPUTER -> return "Компьютер"
+                BluetoothClass.Device.Major.PERIPHERAL -> return "Периферия (клавиатура/мышь)"
+                BluetoothClass.Device.Major.AUDIO_VIDEO -> {
+                    return when (bluetoothClass.deviceClass) {
+                        BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET,
+                        BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE,
+                        BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES,
+                        BluetoothClass.Device.AUDIO_VIDEO_PORTABLE_AUDIO,
+                        BluetoothClass.Device.AUDIO_VIDEO_HIFI_AUDIO,
+                        BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER -> "Наушники/аудио"
+                        BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO -> "Авто/мультимедиа"
+                        else -> "Аудио/видео устройство"
+                    }
+                }
+            }
+        }
+
+        if (name.contains("watch") || name.contains("band") || name.contains("fit")) {
+            return "Часы/носимое"
+        }
+        if (name.contains("buds") || name.contains("head") || name.contains("airpods")) {
+            return "Наушники/аудио"
+        }
+        if (name.contains("phone") || name.contains("iphone") || name.contains("android")) {
+            return "Телефон"
+        }
+
+        return when (device.type) {
+            BluetoothDevice.DEVICE_TYPE_CLASSIC -> "Classic Bluetooth устройство"
+            BluetoothDevice.DEVICE_TYPE_LE -> "BLE устройство"
+            BluetoothDevice.DEVICE_TYPE_DUAL -> "Dual Bluetooth устройство"
+            else -> "Неизвестное устройство"
+        }
     }
 }

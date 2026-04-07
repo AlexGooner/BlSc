@@ -46,7 +46,7 @@
         app:layout_constraintHorizontal_bias="0.107"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/fav_recycler_view"
-        app:layout_constraintVertical_bias="0.891" />
+        app:layout_constraintVertical_bias="0.78" />
 
     <Button
         android:id="@+id/fav_to_seacrh_btn"
@@ -57,10 +57,10 @@
         android:text="@string/to_main"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.957"
+        app:layout_constraintHorizontal_bias="0.914"
         app:layout_constraintStart_toEndOf="@+id/fav_clear_btn"
         app:layout_constraintTop_toBottomOf="@+id/fav_recycler_view"
-        app:layout_constraintVertical_bias="0.891" />
+        app:layout_constraintVertical_bias="0.78" />
 
     <Button
         android:id="@+id/fav_plus_btn"

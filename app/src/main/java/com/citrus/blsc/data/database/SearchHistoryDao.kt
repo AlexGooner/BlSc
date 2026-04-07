@@ -57,4 +57,7 @@ interface SearchHistoryDao {
     
     @Query("SELECT COUNT(*) FROM search_history WHERE isFavourite = 1")
     suspend fun getFavouriteHistoryCount(): Int
+
+    @Query("SELECT COUNT(*) FROM search_history WHERE macAddress = :macAddress AND timestamp >= :fromTimestamp")
+    suspend fun getDetectionCountForMacSince(macAddress: String, fromTimestamp: Long): Int
 }

@@ -1,12 +1,15 @@
 package com.citrus.blsc.ui.fav
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.Spinner
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
@@ -16,6 +19,7 @@ import com.citrus.blsc.R
 import com.citrus.blsc.data.model.FavItem
 import com.citrus.blsc.databinding.ActivityFavouriteBinding
 import com.citrus.blsc.ui.main.MainActivity
+import com.citrus.blsc.utils.AppSecurityManager
 import com.citrus.blsc.utils.AnimationHelper
 import com.citrus.blsc.utils.ThemeHelper
 import com.citrus.blsc.utils.UIAnimationHelper
@@ -32,6 +36,11 @@ class FavActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemeHelper.applyTheme(this)
         super.onCreate(savedInstanceState)
+
+        if (!runSecurityChecks()) {
+            return
+        }
+
         binding = ActivityFavouriteBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -171,5 +180,25 @@ class FavActivity : AppCompatActivity() {
     override fun onBackPressed() {
         super.onBackPressed()
         AnimationHelper.finishActivityWithAnimation(this)
+    }
+
+    private fun runSecurityChecks(): Boolean {
+        return if (!AppSecurityManager.verifyOrBindDevice(this)) {
+            showSecurityBlockDialog(getString(R.string.security_block_device_mismatch))
+            false
+        } else {
+            true
+        }
+    }
+
+    private fun showSecurityBlockDialog(message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.security_block_title))
+            .setMessage(message)
+            .setCancelable(false)
+            .setPositiveButton(getString(R.string.close_app)) { _, _ ->
+                finishAffinity()
+            }
+            .show()
     }
 }

@@ -1,15 +1,22 @@
 package com.citrus.blsc.ui.map
 
 import android.content.Context
+import android.os.Environment
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.math.*
 
 
@@ -368,6 +375,417 @@ class OfflineMapManager(
         }
         return size
     }
+
+
+    /**
+     * Импорт оффлайн карт из ZIP архива
+     */
+    fun importFromZip(zipFile: File, callback: ImportCallback) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                callback.onProgress(0, "Начало импорта...")
+
+                if (!zipFile.exists()) {
+                    callback.onError("Файл не существует: ${zipFile.absolutePath}")
+                    return@launch
+                }
+
+                if (!zipFile.name.endsWith(".zip", ignoreCase = true)) {
+                    callback.onError("Файл должен быть ZIP архивом")
+                    return@launch
+                }
+
+                val importDir = File(context.filesDir, "import_temp")
+                if (importDir.exists()) {
+                    importDir.deleteRecursively()
+                }
+                importDir.mkdirs()
+
+                // Распаковка ZIP
+                callback.onProgress(10, "Распаковка архива...")
+                val success = unzipFile(zipFile, importDir)
+
+                if (!success) {
+                    callback.onError("Ошибка распаковки архива")
+                    return@launch
+                }
+
+                // Поиск файлов карт (рекурсивно во всех подпапках)
+                callback.onProgress(30, "Поиск файлов карт...")
+
+                // Ищем папку offline_tiles или сразу PNG файлы
+                val tilesDir = findOfflineTilesDirectory(importDir)
+                if (tilesDir == null) {
+                    callback.onError("В архиве не найдена папка offline_tiles")
+                    return@launch
+                }
+
+                val tileFiles = findTileFilesRecursive(tilesDir)
+
+                if (tileFiles.isEmpty()) {
+                    callback.onError("В архиве не найдены файлы карт (.png)")
+                    return@launch
+                }
+
+                callback.onProgress(50, "Найдено ${tileFiles.size} файлов. Копирование...")
+
+                // Целевая директория
+                val targetDir = File(context.filesDir, "offline_tiles")
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
+
+                // Копирование файлов с сохранением структуры относительно tilesDir
+                var copied = 0
+                val total = tileFiles.size
+
+                tileFiles.forEachIndexed { index, file ->
+                    // Получаем относительный путь от tilesDir
+                    val relativePath = file.relativeTo(tilesDir).path
+                    val targetFile = File(targetDir, relativePath)
+
+                    targetFile.parentFile?.mkdirs()
+                    file.copyTo(targetFile, overwrite = true)
+                    copied++
+
+                    if (index % 100 == 0 || index == total - 1) {
+                        val progress = 50 + (index * 50 / total)
+                        callback.onProgress(progress, "Скопировано $copied/$total файлов")
+                    }
+                }
+
+                // Очистка временной директории
+                importDir.deleteRecursively()
+
+                // Проверка результата
+                val importedFiles = countFiles(targetDir)
+                callback.onProgress(100, "Импорт завершен!")
+                callback.onComplete(importedFiles, total)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка импорта", e)
+                callback.onError("Ошибка импорта: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Ищет директорию с картами в распакованных файлах
+     */
+    private fun findOfflineTilesDirectory(directory: File): File? {
+        // Проверяем есть ли папка offline_tiles в корне
+        val offlineTilesDir = File(directory, "offline_tiles")
+        if (offlineTilesDir.exists() && offlineTilesDir.isDirectory) {
+            return offlineTilesDir
+        }
+
+        // Ищем PNG файлы рекурсивно
+        return findDirectoryWithPngFiles(directory)
+    }
+
+    /**
+     * Ищет директорию содержащую PNG файлы в структуре zoom/x/y.png
+     */
+    private fun findDirectoryWithPngFiles(directory: File): File? {
+        if (!directory.isDirectory) return null
+
+        // Проверяем текущую директорию на наличие PNG файлов
+        val pngFiles = directory.listFiles { file ->
+            file.isFile && file.name.endsWith(".png", ignoreCase = true)
+        }
+
+        if (pngFiles?.isNotEmpty() == true) {
+            // Проверяем структуру
+            val firstFile = pngFiles[0]
+            val parent = firstFile.parentFile
+            val grandParent = parent?.parentFile
+
+            // Проверяем структуру zoom/x/y.png
+            if (parent != null && grandParent != null) {
+                val zoomDir = grandParent.name
+                val xDir = parent.name
+
+                if (zoomDir.matches(Regex("\\d+")) && xDir.matches(Regex("\\d+"))) {
+                    return grandParent.parentFile ?: grandParent
+                }
+            }
+        }
+
+        // Рекурсивно ищем в поддиректориях
+        directory.listFiles()?.forEach { file ->
+            if (file.isDirectory) {
+                val found = findDirectoryWithPngFiles(file)
+                if (found != null) return found
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Рекурсивно ищет все PNG файлы в директории
+     */
+    private fun findTileFilesRecursive(directory: File): List<File> {
+        val tileFiles = mutableListOf<File>()
+
+        if (directory.isDirectory) {
+            directory.listFiles()?.forEach { file ->
+                if (file.isDirectory) {
+                    tileFiles.addAll(findTileFilesRecursive(file))
+                } else if (file.isFile && file.name.endsWith(".png", ignoreCase = true)) {
+                    tileFiles.add(file)
+                }
+            }
+        }
+
+        return tileFiles
+    }
+
+    /**
+     * Импорт из директории
+     */
+    fun importFromDirectory(sourceDir: File, callback: ImportCallback) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                callback.onProgress(0, "Начало импорта...")
+
+                if (!sourceDir.exists() || !sourceDir.isDirectory) {
+                    callback.onError("Директория не существует")
+                    return@launch
+                }
+
+                // Поиск файлов карт
+                callback.onProgress(30, "Поиск файлов карт...")
+                val tileFiles = findTileFiles(sourceDir)
+
+                if (tileFiles.isEmpty()) {
+                    callback.onError("В директории не найдены файлы карт")
+                    return@launch
+                }
+
+                callback.onProgress(50, "Найдено ${tileFiles.size} файлов. Копирование...")
+
+                // Целевая директория
+                val targetDir = File(context.filesDir, "offline_tiles")
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
+
+                // Копирование файлов
+                var copied = 0
+                val total = tileFiles.size
+
+                tileFiles.forEachIndexed { index, file ->
+                    val relativePath = file.relativeTo(sourceDir).path
+                    val targetFile = File(targetDir, relativePath)
+
+                    targetFile.parentFile?.mkdirs()
+                    file.copyTo(targetFile, overwrite = true)
+                    copied++
+
+                    if (index % 100 == 0 || index == total - 1) {
+                        val progress = 50 + (index * 50 / total)
+                        callback.onProgress(progress, "Скопировано $copied/$total файлов")
+                    }
+                }
+
+                // Проверка результата
+                val importedFiles = countFiles(targetDir)
+                callback.onProgress(100, "Импорт завершен!")
+                callback.onComplete(importedFiles, total)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка импорта", e)
+                callback.onError("Ошибка импорта: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Поиск файлов тайлов в директории (рекурсивно)
+     */
+    private fun findTileFiles(directory: File): List<File> {
+        val tileFiles = mutableListOf<File>()
+
+        if (directory.isDirectory) {
+            directory.listFiles()?.forEach { file ->
+                if (file.isDirectory) {
+                    tileFiles.addAll(findTileFiles(file))
+                } else if (file.isFile && file.name.endsWith(".png")) {
+                    // Проверяем структуру пути (zoom/x/y.png)
+                    val path = file.relativeTo(directory).path
+                    if (isValidTilePath(path)) {
+                        tileFiles.add(file)
+                    }
+                }
+            }
+        }
+
+        return tileFiles
+    }
+
+    /**
+     * Проверка что путь соответствует структуре тайлов (zoom/x/y.png)
+     */
+    private fun isValidTilePath(path: String): Boolean {
+        val parts = path.split(File.separator)
+        if (parts.size < 3) return false
+
+        val zoom = parts[0]
+        val x = parts[1]
+        val y = parts[2]
+
+        return zoom.matches(Regex("\\d+")) &&
+                x.matches(Regex("\\d+")) &&
+                y.matches(Regex("\\d+\\.png"))
+    }
+
+    /**
+     * Распаковка ZIP архива
+     */
+    private fun unzipFile(zipFile: File, targetDir: File): Boolean {
+        return try {
+            java.util.zip.ZipFile(zipFile).use { zip ->
+                val entries = zip.entries()
+
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    val entryFile = File(targetDir, entry.name)
+
+                    if (entry.isDirectory) {
+                        entryFile.mkdirs()
+                    } else {
+                        entryFile.parentFile?.mkdirs()
+
+                        zip.getInputStream(entry).use { input ->
+                            entryFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка распаковки ZIP", e)
+            false
+        }
+    }
+
+    /**
+     * Подсчет файлов в директории
+     */
+    private fun countFiles(directory: File): Int {
+        var count = 0
+        if (directory.isDirectory) {
+            directory.listFiles()?.forEach { file ->
+                count += if (file.isDirectory) {
+                    countFiles(file)
+                } else {
+                    1
+                }
+            }
+        }
+        return count
+    }
+
+    /**
+     * Интерфейс для колбэка импорта
+     */
+    interface ImportCallback {
+        fun onProgress(progress: Int, message: String)
+        fun onComplete(importedCount: Int, totalCount: Int)
+        fun onError(error: String)
+    }
+
+
+    /**
+     * Экспорт карт в ZIP архив с сохранением структуры
+     */
+    fun exportToZip(callback: ExportCallback) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                callback.onProgress(0, "Подготовка к экспорту...")
+
+                val sourceDir = File(context.filesDir, "offline_tiles")
+                if (!sourceDir.exists() || !sourceDir.isDirectory) {
+                    callback.onError("Оффлайн карты не найдены")
+                    return@launch
+                }
+
+                // Собираем все PNG файлы
+                callback.onProgress(10, "Поиск файлов карт...")
+                val tileFiles = findTileFilesRecursive(sourceDir)
+
+                if (tileFiles.isEmpty()) {
+                    callback.onError("Нет файлов для экспорта")
+                    return@launch
+                }
+
+                // Создаем директорию для экспорта
+                val exportDir = File(
+                    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                    "BluetoothScannerMaps"
+                )
+                if (!exportDir.exists()) {
+                    exportDir.mkdirs()
+                }
+
+                // Создаем имя файла с timestamp
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val zipFileName = "offline_maps_$timestamp.zip"
+                val zipFile = File(exportDir, zipFileName)
+
+                callback.onProgress(20, "Создание ZIP архива...")
+
+                // Создаем ZIP архив
+                ZipOutputStream(FileOutputStream(zipFile)).use { zipOut ->
+                    var processedFiles = 0
+                    val totalFiles = tileFiles.size
+
+                    tileFiles.forEachIndexed { index, file ->
+                        // Сохраняем структуру offline_tiles/zoom/x/y.png
+                        val relativePath = "offline_tiles/" + file.relativeTo(sourceDir).path
+
+                        ZipEntry(relativePath).also { zipEntry ->
+                            zipOut.putNextEntry(zipEntry)
+
+                            FileInputStream(file).use { fis ->
+                                fis.copyTo(zipOut)
+                            }
+
+                            zipOut.closeEntry()
+                            processedFiles++
+                        }
+
+                        // Обновляем прогресс
+                        if (index % 10 == 0 || index == totalFiles - 1) {
+                            val progress = 20 + (index * 80 / totalFiles)
+                            callback.onProgress(progress, "Экспортировано $processedFiles/$totalFiles файлов")
+                        }
+                    }
+                }
+
+                callback.onProgress(100, "Экспорт завершен!")
+                callback.onComplete(zipFile, tileFiles.size)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Ошибка экспорта", e)
+                callback.onError("Ошибка экспорта: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Интерфейс для колбэка экспорта
+     */
+    interface ExportCallback {
+        fun onProgress(progress: Int, message: String)
+        fun onComplete(zipFile: File, fileCount: Int)
+        fun onError(error: String)
+    }
+
+
 
     data class TileRange(
         val xMin: Int,
