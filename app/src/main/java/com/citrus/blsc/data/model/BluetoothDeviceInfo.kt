@@ -5,5 +5,7 @@ import android.bluetooth.BluetoothDevice
 data class BluetoothDeviceInfo(
     val device: BluetoothDevice,
     val rssi: Short,
-    val detectionsLast7Days: Int = 0
+    /** Wall-clock time when this device was first seen in the current scan cycle (for list UI). */
+    val discoveredAtEpochMillis: Long,
+    val detectionsLast7Days: Int = 0,
 )

@@ -27,6 +27,11 @@ class FavViewModel(application: Application) : AndroidViewModel(application) {
         favItems.value = repository.getFavItems()
     }
 
+    /** Подтянуть избранное из SharedPreferences (другие экраны могли изменить данные). */
+    fun reloadFromStorage() {
+        favItems.value = repository.getFavItems()
+    }
+
     fun addFavItem(favItem: FavItem) {
         val currentItems = favItems.value?.toMutableList() ?: mutableListOf()
         

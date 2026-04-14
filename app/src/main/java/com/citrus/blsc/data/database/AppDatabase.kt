@@ -8,7 +8,11 @@ import android.content.Context
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.citrus.blsc.data.model.SearchHistoryItem
 
-@Database(entities = [DeviceCoordinate::class, SearchHistoryItem::class], version = 4)
+@Database(
+    entities = [DeviceCoordinate::class, SearchHistoryItem::class],
+    version = 4,
+    exportSchema = false,
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun deviceCoordinateDao(): DeviceCoordinateDao
     abstract fun searchHistoryDao(): SearchHistoryDao

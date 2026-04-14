@@ -180,7 +180,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun saveToSearchHistory(deviceInfo: BluetoothDeviceInfo, context: Context) {
+    /**
+     * Inserts history row then reads the 7-day count so the UI matches the DB (no race with +1).
+     */
+    fun saveToSearchHistoryAndRefreshWeekCount(deviceInfo: BluetoothDeviceInfo, context: Context) {
         viewModelScope.launch {
             try {
                 val device = deviceInfo.device
@@ -188,7 +191,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val macAddress = device.address
                 val deviceType = getDeviceCategory(device)
                 val rssi = deviceInfo.rssi.toString()
-                val timestamp = System.currentTimeMillis()
+                val timestamp = deviceInfo.discoveredAtEpochMillis
 
                 var latitude = currentLatitude
                 var longitude = currentLongitude
@@ -223,34 +226,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 try {
-                    database.searchHistoryDao().insertHistoryItem(historyItem)
+                    withContext(Dispatchers.IO) {
+                        database.searchHistoryDao().insertHistoryItem(historyItem)
+                    }
                     Log.d(
                         "SearchHistory",
                         "Successfully saved device to history: $deviceName ($macAddress)"
                     )
                 } catch (e: Exception) {
                     Log.e("SearchHistory", "Failed to save device to history: ${e.message}")
+                    return@launch
                 }
 
-
+                val fromTimestamp = System.currentTimeMillis() - SEVEN_DAYS_IN_MS
+                val countLast7Days = withContext(Dispatchers.IO) {
+                    database.searchHistoryDao().getDetectionCountForMacSince(macAddress, fromTimestamp)
+                }
+                val deviceIndex = discoveredDevices.indexOfFirst { it.device.address == macAddress }
+                if (deviceIndex != -1) {
+                    discoveredDevices[deviceIndex] =
+                        discoveredDevices[deviceIndex].copy(detectionsLast7Days = countLast7Days)
+                    _devices.value = discoveredDevices.toList()
+                }
             } catch (e: Exception) {
                 Log.e("SearchHistory", "Error creating history item: ${e.message}")
-            }
-        }
-    }
-
-    private fun updateDetectionsLast7Days(macAddress: String) {
-        viewModelScope.launch {
-            val fromTimestamp = System.currentTimeMillis() - SEVEN_DAYS_IN_MS
-            val countLast7Days = withContext(Dispatchers.IO) {
-                database.searchHistoryDao().getDetectionCountForMacSince(macAddress, fromTimestamp)
-            } + 1 // include current discovery before insert completes
-
-            val deviceIndex = discoveredDevices.indexOfFirst { it.device.address == macAddress }
-            if (deviceIndex != -1) {
-                discoveredDevices[deviceIndex] =
-                    discoveredDevices[deviceIndex].copy(detectionsLast7Days = countLast7Days)
-                _devices.value = discoveredDevices.toList()
             }
         }
     }
@@ -278,7 +277,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (!currentCycleDevices.contains(macAddress)) {
                         val rssi: Short =
                             intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
-                        val deviceInfo = BluetoothDeviceInfo(it, rssi)
+                        val discoveredAt = System.currentTimeMillis()
+                        val deviceInfo = BluetoothDeviceInfo(it, rssi, discoveredAt)
 
                         // Добавляем в список обнаруженных устройств
                         discoveredDevices.add(deviceInfo)
@@ -289,10 +289,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _lastDevice.value = deviceInfo
 
                         if (context != null) {
-                            saveToSearchHistory(deviceInfo, context)
+                            saveToSearchHistoryAndRefreshWeekCount(deviceInfo, context)
                             writeDiscoveredDeviceToCache(context, deviceInfo)
                         }
-                        updateDetectionsLast7Days(macAddress)
 
                         // Обновляем счетчик
                         val currentCount = counterList.getOrDefault(macAddress, 0)

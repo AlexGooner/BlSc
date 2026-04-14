@@ -51,4 +51,21 @@
     <string name="security_block_debug">Обнаружен режим отладки. Запуск приложения заблокирован.</string>
     <string name="security_block_device_mismatch">Это приложение привязано к другому устройству и не может быть запущено здесь.</string>
     <string name="close_app">Закрыть</string>
+    <string name="device_menu_add_favourite">Добавить в избранное</string>
+    <string name="device_menu_info">Информация об устройстве</string>
+    <string name="device_info_screen_title">Информация об устройстве</string>
+    <string name="device_info_placeholder">Экран в разработке</string>
+    <string name="device_item_menu">Меню устройства</string>
+    <string name="device_info_label_name">Название устройства</string>
+    <string name="device_info_label_mac">MAC-адрес</string>
+    <string name="device_info_label_category">Категория устройства</string>
+    <string name="device_info_label_total_detections">Обнаружений всего</string>
+    <string name="device_info_label_week_detections">Обнаружений за последние 7 дней</string>
+    <string name="device_info_expand_all_coords">Координаты всех обнаружений</string>
+    <string name="device_info_expand_week_coords">Координаты обнаружений за 7 дней</string>
+    <string name="device_info_no_records">Нет записей</string>
+    <string name="device_info_coord_line">%1$s — %2$s</string>
+    <string name="device_info_add_to_favourites_btn">Добавить в избранное</string>
+    <string name="device_info_added_to_favourites">Устройство добавлено в избранное</string>
+    <string name="device_info_already_in_favourites">Устройство уже в избранном</string>
 </resources>

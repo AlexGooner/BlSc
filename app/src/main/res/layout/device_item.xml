@@ -1,17 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/item_border"
     android:layout_marginTop="10dp">
 
-    <TextView
-        android:id="@+id/name_text_view"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:padding="5dp"/>
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/name_text_view"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="16sp"
+            android:padding="5dp"
+            tools:text="Device name" />
+
+        <ImageButton
+            android:id="@+id/device_menu_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/device_item_menu"
+            android:padding="12dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_more_vert" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/mac_address_text_view"
@@ -47,6 +67,5 @@
         android:layout_height="wrap_content"
         android:textSize="14sp"
         android:padding="5dp"/>
-
 
 </LinearLayout>

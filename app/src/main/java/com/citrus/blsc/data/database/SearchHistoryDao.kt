@@ -60,4 +60,15 @@ interface SearchHistoryDao {
 
     @Query("SELECT COUNT(*) FROM search_history WHERE macAddress = :macAddress AND timestamp >= :fromTimestamp")
     suspend fun getDetectionCountForMacSince(macAddress: String, fromTimestamp: Long): Int
+
+    @Query("SELECT COUNT(*) FROM search_history WHERE macAddress = :macAddress")
+    suspend fun getDetectionCountForMac(macAddress: String): Int
+
+    @Query("SELECT * FROM search_history WHERE macAddress = :macAddress ORDER BY timestamp DESC")
+    suspend fun getHistoryItemsForMac(macAddress: String): List<SearchHistoryItem>
+
+    @Query(
+        "SELECT * FROM search_history WHERE macAddress = :macAddress AND timestamp >= :fromTimestamp ORDER BY timestamp DESC"
+    )
+    suspend fun getHistoryItemsForMacSince(macAddress: String, fromTimestamp: Long): List<SearchHistoryItem>
 }

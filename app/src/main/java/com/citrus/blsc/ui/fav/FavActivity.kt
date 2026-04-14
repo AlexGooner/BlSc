@@ -72,24 +72,7 @@ class FavActivity : AppCompatActivity() {
             viewModel.getMacs(recyclerViewAdapter, binding.favTv)
 
         }
-        val comingDeviceName = intent.getStringExtra("name")
-        val comingMacAddress = intent.getStringExtra("macAddress")
-        val comingRssi = ""
-        val comingArea = ""
-        val vibrateLong = VibrationHelper.DEFAULT_VIBRATION
-        if (comingDeviceName != null && comingMacAddress != null) {
-            val safeVibrateLong = vibrateLong ?: VibrationHelper.DEFAULT_VIBRATION
-
-            viewModel.addFavItem(
-                FavItem(
-                    comingDeviceName,
-                    comingMacAddress,
-                    comingRssi,
-                    comingArea,
-                    safeVibrateLong
-                )
-            )
-        }
+        maybeAddDeviceFromIntent(intent)
 
 
         binding.favPlusBtn.setOnClickListener {
@@ -175,6 +158,33 @@ class FavActivity : AppCompatActivity() {
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             AnimationHelper.startActivityWithAnimation(this, intent)
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        maybeAddDeviceFromIntent(intent)
+    }
+
+    private fun maybeAddDeviceFromIntent(intent: Intent?) {
+        val comingDeviceName = intent?.getStringExtra("name")
+        val comingMacAddress = intent?.getStringExtra("macAddress")
+        if (comingDeviceName == null || comingMacAddress == null) return
+        val vibrateLong = VibrationHelper.DEFAULT_VIBRATION
+        viewModel.addFavItem(
+            FavItem(
+                comingDeviceName,
+                comingMacAddress,
+                rssi = "",
+                area = "",
+                vibrateLong = vibrateLong,
+            ),
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.reloadFromStorage()
     }
 
     override fun onBackPressed() {

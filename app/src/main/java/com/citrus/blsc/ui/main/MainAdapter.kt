@@ -11,8 +11,10 @@ import android.os.Build
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.annotation.RequiresApi
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
@@ -41,6 +43,41 @@ class MainAdapter(private val devices: List<BluetoothDeviceInfo>, private val co
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val deviceInfo = devices[position]
         val device = deviceInfo.device
+
+        holder.menuButton.setOnClickListener { anchor ->
+            val popup = PopupMenu(context, anchor)
+            popup.menuInflater.inflate(R.menu.device_item_menu, popup.menu)
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.menu_add_favourite -> {
+                        val intent = Intent(context, FavActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            putExtra("name", device.name ?: "unnamed")
+                            putExtra("macAddress", device.address)
+                        }
+                        context.startActivity(intent)
+                        true
+                    }
+
+                    R.id.menu_device_info -> {
+                        val intent = Intent(context, DeviceInfoActivity::class.java).apply {
+                            putExtra(DeviceInfoActivity.EXTRA_DEVICE_NAME, device.name ?: "unnamed")
+                            putExtra(DeviceInfoActivity.EXTRA_DEVICE_MAC, device.address)
+                            putExtra(
+                                DeviceInfoActivity.EXTRA_DEVICE_CATEGORY,
+                                getDeviceCategoryLabel(device),
+                            )
+                        }
+                        context.startActivity(intent)
+                        true
+                    }
+
+                    else -> false
+                }
+            }
+            popup.show()
+        }
+
         if (ContextCompat.checkSelfPermission(
                 holder.itemView.context,
                 Manifest.permission.BLUETOOTH_CONNECT
@@ -50,8 +87,8 @@ class MainAdapter(private val devices: List<BluetoothDeviceInfo>, private val co
             holder.nameTextView.text = device.name ?: "unnamed"
             holder.macAddressTextView.text = device.address
 
-            val currentTime = dateFormat.format(Date())
-            holder.timeTextView.text = currentTime
+            holder.timeTextView.text =
+                dateFormat.format(Date(deviceInfo.discoveredAtEpochMillis))
 
             holder.rssiTextView.text = "RSSI: ${deviceInfo.rssi} dBm"
             holder.typeTextView.text = "Категория: ${getDeviceCategoryLabel(device)}"
@@ -65,19 +102,6 @@ class MainAdapter(private val devices: List<BluetoothDeviceInfo>, private val co
                 arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
                 REQUEST_PERMISSION_BLUETOOTH_CONNECT
             )
-        }
-
-        holder.itemView.setOnLongClickListener {
-            val intent = Intent(context, FavActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            val name = holder.nameTextView.text.toString()
-            val macAddress = holder.macAddressTextView.text.toString()
-            println(name)
-            println(macAddress)
-            intent.putExtra("name", name)
-            intent.putExtra("macAddress", macAddress)
-            context.startActivity(intent)
-            true
         }
     }
 
@@ -152,6 +176,7 @@ class MainAdapter(private val devices: List<BluetoothDeviceInfo>, private val co
     }
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        val menuButton: ImageButton = itemView.findViewById(R.id.device_menu_button)
         val nameTextView: TextView = itemView.findViewById(R.id.name_text_view)
         val macAddressTextView: TextView = itemView.findViewById(R.id.mac_address_text_view)
         val timeTextView: TextView = itemView.findViewById(R.id.time_text_view)
