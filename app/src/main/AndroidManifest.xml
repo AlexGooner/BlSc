@@ -38,6 +38,12 @@
 
 
         <activity
+            android:name=".ui.whitelist.WhiteListActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".ui.fav.FavActivity"
             android:exported="true"
             android:launchMode="singleTop"

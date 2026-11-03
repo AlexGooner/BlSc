@@ -19,6 +19,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.citrus.blsc.ui.fav.FavActivity
+import com.citrus.blsc.ui.whitelist.WhiteListActivity
 import com.citrus.blsc.R
 import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import java.text.SimpleDateFormat
@@ -54,6 +55,16 @@ class MainAdapter(private val devices: List<BluetoothDeviceInfo>, private val co
                             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                             putExtra("name", device.name ?: "unnamed")
                             putExtra("macAddress", device.address)
+                        }
+                        context.startActivity(intent)
+                        true
+                    }
+
+                    R.id.menu_add_whitelist -> {
+                        val intent = Intent(context, WhiteListActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            putExtra(WhiteListActivity.EXTRA_NAME, device.name ?: "unnamed")
+                            putExtra(WhiteListActivity.EXTRA_MAC, device.address)
                         }
                         context.startActivity(intent)
                         true

@@ -2,12 +2,14 @@ package com.citrus.blsc.ui.settings
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.widget.Button
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.citrus.blsc.R
 import com.citrus.blsc.ui.dbviewer.DatabaseViewerActivity
 import com.citrus.blsc.ui.map.OfflineMapActivity
@@ -49,6 +51,16 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupProximityThreshold() {
+        val blue = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.blue))
+        val white = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.white))
+        proximitySlider.valueFrom = ProximitySettingsHelper.MIN_THRESHOLD.toFloat()
+        proximitySlider.valueTo = ProximitySettingsHelper.MAX_THRESHOLD.toFloat()
+        proximitySlider.stepSize = 1f
+        proximitySlider.isTickVisible = false
+        proximitySlider.trackActiveTintList = blue
+        proximitySlider.trackInactiveTintList = white
+        proximitySlider.thumbTintList = blue
+
         val threshold = ProximitySettingsHelper.getThreshold(this)
         proximitySlider.value = threshold.toFloat()
         updateProximityValueText(threshold)

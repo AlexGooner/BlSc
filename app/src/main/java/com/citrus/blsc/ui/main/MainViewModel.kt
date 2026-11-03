@@ -28,6 +28,7 @@ import androidx.lifecycle.viewModelScope
 import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import com.citrus.blsc.data.model.SearchHistoryItem
 import com.citrus.blsc.data.database.AppDatabase
+import com.citrus.blsc.data.repository.WhiteListRepository
 import com.citrus.blsc.utils.NotificationHelper
 import com.citrus.blsc.utils.ProximitySettingsHelper
 import com.citrus.blsc.utils.TextFileHelper
@@ -64,6 +65,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var favouriteVibrations: Map<String, String> = emptyMap()
     private val counterList = mutableMapOf<String, Int>()
     private val database = AppDatabase.getDatabase(application)
+    private val whiteListRepository: WhiteListRepository by lazy {
+        val prefs = application.getSharedPreferences(
+            WhiteListRepository.PREFS_NAME,
+            Context.MODE_PRIVATE,
+        )
+        WhiteListRepository(prefs)
+    }
     private var currentLatitude: Double? = null
     private var currentLongitude: Double? = null
     private val currentCycleDevices = mutableSetOf<String>()
@@ -303,8 +311,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             "Device found: $macAddress, RSSI: $rssi, cycle count: ${currentCycleDevices.size}, total count: $newCount"
                         )
 
-                        // Проверяем порог
-                        if (context != null &&
+                        // Устройства из белого списка не вызывают предупреждение о близости
+                        if (whiteListRepository.containsMac(macAddress)) {
+                            counterList[macAddress] = 0
+                            Log.d(
+                                "MainViewModel",
+                                "Whitelist device, proximity warning skipped: $macAddress"
+                            )
+                        } else if (context != null &&
                             newCount >= ProximitySettingsHelper.getThreshold(context)
                         ) {
                             NotificationHelper.showDeviceProximityNotification(

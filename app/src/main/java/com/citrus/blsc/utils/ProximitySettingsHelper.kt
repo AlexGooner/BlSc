@@ -9,7 +9,7 @@ object ProximitySettingsHelper {
 
     const val DEFAULT_THRESHOLD = 10
     const val MIN_THRESHOLD = 2
-    const val MAX_THRESHOLD = 50
+    const val MAX_THRESHOLD = 100
 
     fun getThreshold(context: Context): Int {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)

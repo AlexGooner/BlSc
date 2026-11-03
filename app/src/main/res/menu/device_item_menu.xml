@@ -4,6 +4,9 @@
         android:id="@+id/menu_add_favourite"
         android:title="@string/device_menu_add_favourite" />
     <item
+        android:id="@+id/menu_add_whitelist"
+        android:title="@string/device_menu_add_whitelist" />
+    <item
         android:id="@+id/menu_device_info"
         android:title="@string/device_menu_info" />
 </menu>

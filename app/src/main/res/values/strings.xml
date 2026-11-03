@@ -76,7 +76,16 @@
     <string name="security_block_device_mismatch">Это приложение привязано к другому устройству и не может быть запущено здесь.</string>
     <string name="close_app">Закрыть</string>
     <string name="device_menu_add_favourite">Добавить в избранное</string>
+    <string name="device_menu_add_whitelist">Добавить в белый список</string>
     <string name="device_menu_info">Информация об устройстве</string>
+    <string name="whitelist">Белый список</string>
+    <string name="whitelist_count">Устройств в белом списке: %1$d</string>
+    <string name="whitelist_added">Устройство добавлено в белый список</string>
+    <string name="whitelist_duplicate">Это устройство уже есть в белом списке</string>
+    <string name="whitelist_invalid_mac">Не удалось добавить устройство: нет MAC-адреса</string>
+    <string name="whitelist_removed">Устройство удалено из белого списка</string>
+    <string name="whitelist_clear_title">Очистить белый список</string>
+    <string name="whitelist_clear_message">Удалить все устройства из белого списка? Предупреждения о них снова начнут появляться.</string>
     <string name="device_info_screen_title">Информация об устройстве</string>
     <string name="device_info_placeholder">Экран в разработке</string>
     <string name="device_item_menu">Меню устройства</string>

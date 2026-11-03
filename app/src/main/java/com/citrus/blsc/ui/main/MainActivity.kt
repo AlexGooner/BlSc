@@ -32,6 +32,7 @@ import com.citrus.blsc.data.database.DeviceCoordinate
 import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import com.citrus.blsc.databinding.ActivityMainBinding
 import com.citrus.blsc.ui.fav.FavActivity
+import com.citrus.blsc.ui.whitelist.WhiteListActivity
 import com.citrus.blsc.utils.AppSecurityManager
 import com.citrus.blsc.ui.history.HistoryActivity
 import com.citrus.blsc.ui.settings.SettingsActivity
@@ -188,6 +189,13 @@ class MainActivity() : AppCompatActivity() {
         binding.favImageView.setOnClickListener {
             UIAnimationHelper.animatePulse(binding.favImageView)
             val intent = Intent(this, FavActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            AnimationHelper.startActivityWithAnimation(this, intent)
+        }
+
+        binding.whitelistImageView.setOnClickListener {
+            UIAnimationHelper.animatePulse(binding.whitelistImageView)
+            val intent = Intent(this, WhiteListActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             AnimationHelper.startActivityWithAnimation(this, intent)
         }

@@ -81,7 +81,7 @@
         android:layout_marginBottom="24dp"
         android:stepSize="1"
         android:valueFrom="2"
-        android:valueTo="50" />
+        android:valueTo="100" />
 
     <!-- Кнопка карт -->
     <Button
