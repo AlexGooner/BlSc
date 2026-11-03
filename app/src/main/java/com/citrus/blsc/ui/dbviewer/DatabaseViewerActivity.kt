@@ -6,14 +6,17 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.citrus.blsc.R
 import com.citrus.blsc.utils.DatabaseHelper
 import com.citrus.blsc.utils.AnimationHelper
 import com.citrus.blsc.utils.ThemeHelper
+import kotlinx.coroutines.launch
 import java.io.File
 
 class DatabaseViewerActivity : AppCompatActivity() {
@@ -23,6 +26,7 @@ class DatabaseViewerActivity : AppCompatActivity() {
     private lateinit var spinnerTables: Spinner
     private lateinit var recyclerView: RecyclerView
     private lateinit var btnExport: Button
+    private lateinit var btnClearDatabase: Button
     private lateinit var btnBack: Button
     private lateinit var progressBar: ProgressBar
 
@@ -44,6 +48,7 @@ class DatabaseViewerActivity : AppCompatActivity() {
         spinnerTables = findViewById(R.id.spinnerTables)
         recyclerView = findViewById(R.id.recyclerView)
         btnExport = findViewById(R.id.btnExport)
+        btnClearDatabase = findViewById(R.id.btnClearDatabase)
         btnBack = findViewById(R.id.btnBack)
         progressBar = findViewById(R.id.progressBarDb)
 
@@ -98,8 +103,46 @@ class DatabaseViewerActivity : AppCompatActivity() {
             exportDatabase()
         }
 
+        btnClearDatabase.setOnClickListener {
+            confirmClearDatabase()
+        }
+
         btnBack.setOnClickListener {
             onBackPressed()
+        }
+    }
+
+    private fun confirmClearDatabase() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.clear_database))
+            .setMessage(getString(R.string.clear_database_confirmation))
+            .setPositiveButton(getString(R.string.clear)) { _, _ ->
+                clearDatabase()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun clearDatabase() {
+        progressBar.visibility = ProgressBar.VISIBLE
+        btnClearDatabase.isEnabled = false
+        btnExport.isEnabled = false
+
+        lifecycleScope.launch {
+            val cleared = DatabaseHelper.clearAllData(this@DatabaseViewerActivity)
+            progressBar.visibility = ProgressBar.GONE
+            btnClearDatabase.isEnabled = true
+            btnExport.isEnabled = true
+
+            if (cleared) {
+                Toast.makeText(this@DatabaseViewerActivity, R.string.clear_database_done, Toast.LENGTH_SHORT)
+                    .show()
+                loadDatabaseInfo()
+                spinnerTables.selectedItem?.toString()?.let { loadTableData(it) }
+            } else {
+                Toast.makeText(this@DatabaseViewerActivity, R.string.clear_database_error, Toast.LENGTH_SHORT)
+                    .show()
+            }
         }
     }
 

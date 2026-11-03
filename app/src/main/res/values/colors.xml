@@ -30,5 +30,6 @@
     <color name="card_background_light">#FFFFFFFF</color>
     <color name="card_background_dark">#FF2C2C2C</color>
     <color name="border_light">#FFE0E0E0</color>
+    <color name="location_status_background">#FFF4F0FC</color>
     <color name="border_dark">#FF404040</color>
 </resources>

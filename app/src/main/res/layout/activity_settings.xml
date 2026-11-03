@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="match_parent">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="16dp"
     >
@@ -55,6 +58,31 @@
 
     </RadioGroup>
 
+    <!-- Порог уведомления о продолжительном присутствии -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Уведомление о присутствии"
+        android:textSize="18sp"
+        android:layout_marginBottom="4dp"
+        android:textColor="?attr/colorOnBackground" />
+
+    <TextView
+        android:id="@+id/proximity_threshold_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textColor="?attr/colorOnBackground" />
+
+    <com.google.android.material.slider.Slider
+        android:id="@+id/proximity_threshold_slider"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:stepSize="1"
+        android:valueFrom="2"
+        android:valueTo="50" />
+
     <!-- Кнопка карт -->
     <Button
         android:id="@+id/maps_button"
@@ -86,3 +114,5 @@
         android:layout_marginTop="16dp" />
 
 </LinearLayout>
+
+</ScrollView>

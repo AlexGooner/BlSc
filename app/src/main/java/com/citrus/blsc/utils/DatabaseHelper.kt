@@ -9,6 +9,7 @@ import com.citrus.blsc.data.database.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,6 +46,20 @@ object DatabaseHelper {
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting database: ${e.message}", e)
             null
+        }
+    }
+
+    suspend fun clearAllData(context: Context): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val db = AppDatabase.getDatabase(context)
+            db.searchHistoryDao().clearAllHistory()
+            db.deviceCoordinateDao().deleteAllFavCoordinates()
+            db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close()
+            Log.d(TAG, "Database data cleared")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing database: ${e.message}", e)
+            false
         }
     }
 

@@ -87,6 +87,15 @@
             android:layout_marginBottom="8dp" />
 
         <Button
+            android:id="@+id/btnClearDatabase"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:backgroundTint="@color/Red"
+            android:text="@string/clear_database"
+            android:textColor="@color/white" />
+
+        <Button
             android:id="@+id/btnBack"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -29,6 +29,7 @@ import com.citrus.blsc.data.model.BluetoothDeviceInfo
 import com.citrus.blsc.data.model.SearchHistoryItem
 import com.citrus.blsc.data.database.AppDatabase
 import com.citrus.blsc.utils.NotificationHelper
+import com.citrus.blsc.utils.ProximitySettingsHelper
 import com.citrus.blsc.utils.TextFileHelper
 import com.citrus.blsc.utils.VibrationHelper
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -43,7 +44,6 @@ import java.util.Calendar
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
-        const val PROXIMITY_THRESHOLD = 10
         private const val SEVEN_DAYS_IN_MS = 7L * 24L * 60L * 60L * 1000L
     }
 
@@ -304,21 +304,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
 
                         // Проверяем порог
-                        if (newCount >= PROXIMITY_THRESHOLD) {
-                            if (context != null) {
-                                NotificationHelper.showDeviceProximityNotification(
-                                    context,
-                                    macAddress
-                                )
+                        if (context != null &&
+                            newCount >= ProximitySettingsHelper.getThreshold(context)
+                        ) {
+                            NotificationHelper.showDeviceProximityNotification(
+                                context,
+                                macAddress
+                            )
 
-                                // Сбрасываем счетчик после показа уведомления
-                                counterList[macAddress] = 0
+                            // Сбрасываем счетчик после показа уведомления
+                            counterList[macAddress] = 0
 
-                                Log.d(
-                                    "MainViewModel",
-                                    "Proximity threshold reached for $macAddress"
-                                )
-                            }
+                            Log.d(
+                                "MainViewModel",
+                                "Proximity threshold reached for $macAddress"
+                            )
                         }
 
                         if (context != null && favouriteMacs.contains(macAddress)) {
@@ -351,6 +351,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         bluetoothAdapter?.cancelDiscovery()
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun writeDiscoveredDeviceToCache(context: Context, deviceInfo: BluetoothDeviceInfo) {
         if (!::textFileHelper.isInitialized) {
             textFileHelper = TextFileHelper(context)
@@ -365,6 +366,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         textFileHelper.writeToFile(record)
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun getDeviceCategory(device: BluetoothDevice): String {
         val bluetoothClass = device.bluetoothClass
         val name = (device.name ?: "").lowercase()

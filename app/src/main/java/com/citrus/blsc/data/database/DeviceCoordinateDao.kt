@@ -13,6 +13,9 @@ interface DeviceCoordinateDao {
     @Query("SELECT * FROM device_coordinates WHERE macAddress = :macAddress LIMIT 100")
     suspend fun getCoordinateByMac(macAddress: String): List<DeviceCoordinate?>
 
+    @Query("SELECT * FROM device_coordinates WHERE macAddress = :macAddress")
+    suspend fun getAllCoordinatesByMac(macAddress: String): List<DeviceCoordinate>
+
     @Query("SELECT COUNT(*) FROM device_coordinates WHERE macAddress = :macAddress")
     suspend fun countCoordinatesByMac(macAddress: String): Int
 

@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
@@ -62,6 +63,7 @@ import com.citrus.blsc.R
 import com.citrus.blsc.utils.NotificationHelper
 import com.citrus.blsc.utils.PermissionHelper
 import com.google.android.gms.location.Priority
+import java.util.Locale
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -78,6 +80,7 @@ class MainActivity() : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private var wakeLock: PowerManager.WakeLock? = null
     private var currentLocation: String? = null
+    private var hasLocationFix = false
     private var isScanning = false
     private var scanningJob: Job? = null
     private val bluetoothStateReceiver = BluetoothStateReceiver()
@@ -161,8 +164,14 @@ class MainActivity() : AppCompatActivity() {
         }
 
         viewModel.location.observe(this) { location ->
-            binding.locationTextView.text = location
-            currentLocation = location
+            val parts = location.trim().split(" ")
+            val latitude = parts.getOrNull(0)?.toDoubleOrNull()
+            val longitude = parts.getOrNull(1)?.toDoubleOrNull()
+            if (parts.size == 2 && latitude != null && longitude != null) {
+                updateLocationText(latitude, longitude)
+            } else {
+                currentLocation = location
+            }
         }
 
         binding.stopBtn.setOnClickListener {
@@ -205,20 +214,21 @@ class MainActivity() : AppCompatActivity() {
                 ) {
                 }
                 if (it != null) {
+                    val locationText = currentLocation.orEmpty()
                     binding.mainTextView.append(
                         "\n" + (it.device.name
                             ?: "unnamed") + "\n" + it.device.address + "\n"
-                                + binding.locationTextView.text + "\n"
+                                + locationText + "\n"
                                 + viewModel.getCurrentTime() + "\n"
                                 + it.rssi + " dBm"
                     )
                     binding.mapsTextView.append(
-                        it.device.address + "\n" + binding.locationTextView.text + "\n"
+                        it.device.address + "\n" + locationText + "\n"
                     )
 
                     persistCurrentDeviceCoordinate(
                         mac = it.device.address,
-                        locationText = binding.locationTextView.text.toString()
+                        locationText = locationText
                     )
                 }
             }
@@ -291,6 +301,7 @@ class MainActivity() : AppCompatActivity() {
         }
 
         isScanning = true
+        showLocationStatusSearching()
         acquireWakeLock()
 
         // Начинаем мониторинг состояния
@@ -345,6 +356,7 @@ class MainActivity() : AppCompatActivity() {
 
                 // 3. Получаем координаты (сканирование уже идет)
                 try {
+                    showLocationStatusSearching()
                     val currentCoordinates = withContext(Dispatchers.IO) {
                         getCurrentCoordinatesSync()
                     }
@@ -649,6 +661,7 @@ class MainActivity() : AppCompatActivity() {
         releaseWakeLock()
 
         binding.lottieAnimation.isVisible = false
+        hideLocationStatus()
         binding.startBtn.isEnabled = true
         binding.stopBtn.isEnabled = false
 
@@ -658,13 +671,65 @@ class MainActivity() : AppCompatActivity() {
         Toast.makeText(this, "Сканирование остановлено", Toast.LENGTH_SHORT).show()
     }
 
-    private fun updateLocationText(latitude: Double?, longitude: Double?) {
-        val locationText = if (latitude != null && longitude != null) {
-            "$latitude $longitude"
+    private fun showLocationStatusSearching() {
+        if (!isScanning) return
+        val previous = formattedFixOrNull()
+        if (previous == null) {
+            setLocationStatus(getString(R.string.location_status_searching), R.color.orange)
         } else {
-            "Координаты недоступны"
+            setLocationStatus(getString(R.string.location_status_updating, previous), R.color.orange)
         }
-        binding.locationTextView.text = locationText
+    }
+
+    private fun updateLocationText(latitude: Double?, longitude: Double?) {
+        if (latitude != null && longitude != null) {
+            currentLocation = "$latitude $longitude"
+            hasLocationFix = true
+            if (isScanning) {
+                setLocationStatus(
+                    getString(R.string.location_status_found, formatCoordinate(latitude, longitude)),
+                    R.color.green
+                )
+            }
+            return
+        }
+
+        if (hasLocationFix) {
+            val previous = formattedFixOrNull()
+            if (isScanning && previous != null) {
+                setLocationStatus(getString(R.string.location_status_stale, previous), R.color.orange)
+            }
+            return
+        }
+
+        currentLocation = null
+        if (isScanning) {
+            setLocationStatus(getString(R.string.location_status_unavailable), R.color.Red)
+        }
+    }
+
+    private fun setLocationStatus(text: String, dotColorRes: Int) {
+        binding.locationStatusBar.isVisible = true
+        binding.locationTextView.text = text
+        binding.locationStatusDot.backgroundTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(this, dotColorRes)
+        )
+    }
+
+    private fun hideLocationStatus() {
+        binding.locationStatusBar.isVisible = false
+    }
+
+    private fun formatCoordinate(latitude: Double, longitude: Double): String {
+        return String.format(Locale.US, "%.5f, %.5f", latitude, longitude)
+    }
+
+    private fun formattedFixOrNull(): String? {
+        val parts = currentLocation?.trim()?.split(" ") ?: return null
+        if (parts.size != 2) return null
+        val latitude = parts[0].toDoubleOrNull() ?: return null
+        val longitude = parts[1].toDoubleOrNull() ?: return null
+        return formatCoordinate(latitude, longitude)
     }
 
     private fun areAllPermissionsGranted(): Boolean {
@@ -821,6 +886,7 @@ class MainActivity() : AppCompatActivity() {
             viewModel.stopScanning(this)
             viewModel.stopTimer()
             binding.lottieAnimation.isVisible = false
+            hideLocationStatus()
             Toast.makeText(this, "Scanning paused - location disabled", Toast.LENGTH_SHORT).show()
         }
         if (scanningJob != null && wakeLock == null) {

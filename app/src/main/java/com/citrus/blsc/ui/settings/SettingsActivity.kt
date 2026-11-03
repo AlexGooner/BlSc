@@ -6,16 +6,21 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.citrus.blsc.R
 import com.citrus.blsc.ui.dbviewer.DatabaseViewerActivity
 import com.citrus.blsc.ui.map.OfflineMapActivity
 import com.citrus.blsc.utils.AnimationHelper
+import com.citrus.blsc.utils.ProximitySettingsHelper
 import com.citrus.blsc.utils.ThemeHelper
+import com.google.android.material.slider.Slider
 
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var themeRadioGroup: RadioGroup
+    private lateinit var proximitySlider: Slider
+    private lateinit var proximityValueText: TextView
     private lateinit var backButton: Button
     private lateinit var mapsButton: Button
     private lateinit var btnDatabase: Button
@@ -28,6 +33,7 @@ class SettingsActivity : AppCompatActivity() {
 
         initViews()
         setupThemeSelection()
+        setupProximityThreshold()
         setupMapsButton()
         setupBackButton()
         setupDatabaseButton()
@@ -38,6 +44,25 @@ class SettingsActivity : AppCompatActivity() {
         backButton = findViewById(R.id.back_button)
         mapsButton = findViewById(R.id.maps_button)
         btnDatabase = findViewById(R.id.btnDatabase)
+        proximitySlider = findViewById(R.id.proximity_threshold_slider)
+        proximityValueText = findViewById(R.id.proximity_threshold_value)
+    }
+
+    private fun setupProximityThreshold() {
+        val threshold = ProximitySettingsHelper.getThreshold(this)
+        proximitySlider.value = threshold.toFloat()
+        updateProximityValueText(threshold)
+
+        proximitySlider.addOnChangeListener { _, value, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            val newThreshold = value.toInt()
+            ProximitySettingsHelper.setThreshold(this, newThreshold)
+            updateProximityValueText(newThreshold)
+        }
+    }
+
+    private fun updateProximityValueText(threshold: Int) {
+        proximityValueText.text = "Уведомлять после $threshold обнаружений устройства"
     }
 
     private fun setupThemeSelection() {

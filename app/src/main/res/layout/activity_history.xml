@@ -95,6 +95,17 @@
 
         </LinearLayout>
 
+        <Button
+            android:id="@+id/group_by_detections_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="@color/grey"
+            android:text="@string/group_by_detections"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
+
         <!-- Action Buttons -->
         <LinearLayout
             android:layout_width="match_parent"

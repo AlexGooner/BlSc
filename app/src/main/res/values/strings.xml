@@ -14,6 +14,15 @@
     <string name="to_history">К истории поиска</string>
     <string name="save">Save</string>
     <string name="title_activity_maps">MapsActivity</string>
+    <string name="map_pick_day">Выбрать день</string>
+    <string name="map_all_time">Все время</string>
+    <string name="map_all_detections">Все обнаружения</string>
+    <string name="map_day_detections">День: %1$s</string>
+    <string name="map_no_points">точек нет</string>
+    <string name="map_no_points_for_day">В этот день обнаружений нет</string>
+    <string name="map_route_start">Старт</string>
+    <string name="map_route_finish">Финиш</string>
+    <string name="map_route_point">Точка %1$d</string>
     <string name="area">Area</string>
     <string name="info">Info</string>
     <string name="area_rus">Зона</string>
@@ -27,6 +36,11 @@
     <string name="search_history">История поиска</string>
     <string name="search_by_mac_or_name">Поиск по MAC или имени устройства</string>
     <string name="date">Дата</string>
+    <string name="group_by_detections">По количеству обнаружений</string>
+    <string name="group_by_detections_enabled">✓ По количеству обнаружений</string>
+    <string name="last_detection">Последнее: %1$s</string>
+    <string name="expand_detections_group">Раскрыть обнаружения</string>
+    <string name="collapse_detections_group">Свернуть обнаружения</string>
     <string name="favourites_only">Только избранные</string>
     <string name="clear_filters">Очистить фильтры</string>
     <string name="clear_history">Очистить историю</string>
@@ -37,9 +51,19 @@
     <string name="start_scanning_to_see_devices">Начните сканирование, чтобы увидеть\nобнаруженные устройства здесь</string>
     <string name="unknown_device">Неизвестное устройство</string>
     <string name="coordinates_unavailable">Координаты недоступны</string>
+    <string name="location_status_label">Координаты</string>
+    <string name="location_status_searching">поиск…</string>
+    <string name="location_status_updating">обновление · %1$s</string>
+    <string name="location_status_found">найдены · %1$s</string>
+    <string name="location_status_unavailable">не найдены</string>
+    <string name="location_status_stale">нет сигнала · %1$s</string>
     <string name="delete_record">Удалить запись</string>
     <string name="delete_record_confirmation">Вы уверены, что хотите удалить эту запись из истории?</string>
     <string name="clear_history_confirmation">Вы уверены, что хотите очистить всю историю поиска? Это действие нельзя отменить.</string>
+    <string name="clear_database">Очистить базу</string>
+    <string name="clear_database_confirmation">Будут безвозвратно удалены все данные базы:\n• история обнаружений и отметки избранного в ней;\n• координаты устройств и маршруты на карте.\n\nСписок избранных устройств не изменится. Восстановить удалённые записи нельзя.</string>
+    <string name="clear_database_done">Данные базы удалены</string>
+    <string name="clear_database_error">Не удалось очистить базу</string>
     <string name="cancel">Отмена</string>
     <string name="download_moscow_map">Скачать карту Москвы</string>
     <string name="delete_offline_map">Удалить оффлайн карту</string>
@@ -68,4 +92,16 @@
     <string name="device_info_add_to_favourites_btn">Добавить в избранное</string>
     <string name="device_info_added_to_favourites">Устройство добавлено в избранное</string>
     <string name="device_info_already_in_favourites">Устройство уже в избранном</string>
+    <plurals name="map_points_count">
+        <item quantity="one">%d точка</item>
+        <item quantity="few">%d точки</item>
+        <item quantity="many">%d точек</item>
+        <item quantity="other">%d точек</item>
+    </plurals>
+    <plurals name="detection_count">
+        <item quantity="one">%d обнаружение</item>
+        <item quantity="few">%d обнаружения</item>
+        <item quantity="many">%d обнаружений</item>
+        <item quantity="other">%d обнаружений</item>
+    </plurals>
 </resources>

@@ -2,6 +2,7 @@ package com.citrus.blsc.ui.history
 
 import android.annotation.SuppressLint
 import android.app.DatePickerDialog
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -10,8 +11,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.SimpleItemAnimator
 import com.citrus.blsc.R
 import com.citrus.blsc.data.model.SearchHistoryItem
 import com.citrus.blsc.utils.AnimationHelper
@@ -26,6 +29,7 @@ class HistoryActivity : AppCompatActivity(), HistoryAdapter.OnHistoryItemActionL
     private lateinit var dateEditText: TextInputEditText
     private lateinit var clearFiltersButton: Button
     private lateinit var clearHistoryButton: Button
+    private lateinit var groupByDetectionsButton: Button
     private lateinit var historyRecyclerView: androidx.recyclerview.widget.RecyclerView
     private lateinit var emptyStateLayout: LinearLayout
     private lateinit var backButton: ImageView
@@ -35,6 +39,7 @@ class HistoryActivity : AppCompatActivity(), HistoryAdapter.OnHistoryItemActionL
     private val historyItems = mutableListOf<SearchHistoryItem>()
 
     private var isFavouriteFilterActive = false
+    private var isGroupByDetections = false
     private var selectedDate: String? = null
     private var searchQuery = ""
 
@@ -57,6 +62,7 @@ class HistoryActivity : AppCompatActivity(), HistoryAdapter.OnHistoryItemActionL
         dateEditText = findViewById(R.id.date_edit_text)
         clearFiltersButton = findViewById(R.id.clear_filters_button)
         clearHistoryButton = findViewById(R.id.clear_history_button)
+        groupByDetectionsButton = findViewById(R.id.group_by_detections_button)
         historyRecyclerView = findViewById(R.id.history_recycler_view)
         emptyStateLayout = findViewById(R.id.empty_state_layout)
         backButton = findViewById(R.id.back_button)
@@ -86,6 +92,7 @@ class HistoryActivity : AppCompatActivity(), HistoryAdapter.OnHistoryItemActionL
         historyAdapter = HistoryAdapter(historyItems, this, this)
         historyRecyclerView.layoutManager = LinearLayoutManager(this)
         historyRecyclerView.adapter = historyAdapter
+        (historyRecyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
     }
 
     private fun setupListeners() {
@@ -106,6 +113,10 @@ class HistoryActivity : AppCompatActivity(), HistoryAdapter.OnHistoryItemActionL
             showDatePicker()
         }
 
+
+        groupByDetectionsButton.setOnClickListener {
+            applyGroupByDetections(!isGroupByDetections)
+        }
 
         clearFiltersButton.setOnClickListener {
             clearFilters()
@@ -139,7 +150,23 @@ class HistoryActivity : AppCompatActivity(), HistoryAdapter.OnHistoryItemActionL
         datePickerDialog.show()
     }
 
+    private fun applyGroupByDetections(enabled: Boolean) {
+        val changed = isGroupByDetections != enabled
+        isGroupByDetections = enabled
+        groupByDetectionsButton.setText(
+            if (enabled) R.string.group_by_detections_enabled else R.string.group_by_detections
+        )
+        groupByDetectionsButton.backgroundTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(this, if (enabled) R.color.purple else R.color.grey)
+        )
+        historyAdapter.setGroupByDetections(enabled)
+        if (changed) {
+            historyRecyclerView.scrollToPosition(0)
+        }
+    }
+
     private fun clearFilters() {
+        applyGroupByDetections(false)
         searchEditText.setText("")
         dateEditText.setText("")
         selectedDate = null
